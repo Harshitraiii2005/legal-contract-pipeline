@@ -1,0 +1,1 @@
+// Declarative pipeline: lint -> test -> eval gate -> build -> push -> deploy
