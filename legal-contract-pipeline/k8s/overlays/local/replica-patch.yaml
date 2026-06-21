@@ -1,0 +1,25 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: legal-backend
+spec:
+  replicas: 1
+  template:
+    spec:
+      initContainers:
+        - name: migrate
+          image: legal-backend:dev
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: legal-worker
+spec:
+  replicas: 1
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: legal-frontend
+spec:
+  replicas: 1

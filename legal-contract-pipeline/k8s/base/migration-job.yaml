@@ -1,0 +1,28 @@
+# Standalone migration Job — useful for running migrations independently of a
+# deploy (e.g. before the first rollout, or to apply a migration without
+# restarting backend pods). The backend Deployment also runs migrations via
+# an initContainer for safety on every rollout.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: legal-migrate
+  labels:
+    app: legal-migrate
+spec:
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels:
+        app: legal-migrate
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: legal-backend:latest  # overwritten by kustomize image transformer
+          command: ["alembic", "upgrade", "head"]
+          envFrom:
+            - configMapRef:
+                name: legal-backend-config
+            - secretRef:
+                name: legal-backend-secrets

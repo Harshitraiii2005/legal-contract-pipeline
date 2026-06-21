@@ -1,0 +1,125 @@
+# In-cluster MLflow tracking server. Lives in the shared `legal-pipeline`
+# namespace (not per-environment) so staging and production evals report to
+# the same experiment history — apply this once, separately from the
+# base/overlay app manifests:
+#
+#   kubectl apply -f mlflow/k8s/mlflow-deployment.yaml
+#
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: mlflow
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mlflow-db-secret
+  namespace: mlflow
+type: Opaque
+stringData:
+  POSTGRES_PASSWORD: "CHANGE_ME"
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mlflow-db
+  namespace: mlflow
+spec:
+  serviceName: mlflow-db
+  replicas: 1
+  selector:
+    matchLabels: { app: mlflow-db }
+  template:
+    metadata:
+      labels: { app: mlflow-db }
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          env:
+            - name: POSTGRES_USER
+              value: mlflow
+            - name: POSTGRES_DB
+              value: mlflow
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: mlflow-db-secret, key: POSTGRES_PASSWORD }
+          ports: [{ containerPort: 5432 }]
+          volumeMounts:
+            - name: mlflow-db-data
+              mountPath: /var/lib/postgresql/data
+              subPath: pgdata
+  volumeClaimTemplates:
+    - metadata: { name: mlflow-db-data }
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources: { requests: { storage: 10Gi } }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mlflow-db
+  namespace: mlflow
+spec:
+  clusterIP: None
+  selector: { app: mlflow-db }
+  ports: [{ port: 5432, targetPort: 5432 }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mlflow
+  namespace: mlflow
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: mlflow }
+  template:
+    metadata:
+      labels: { app: mlflow }
+    spec:
+      containers:
+        - name: mlflow
+          image: legal-mlflow:latest  # built from mlflow/Dockerfile, pushed to ECR like the other images
+          ports: [{ containerPort: 5000 }]
+          env:
+            - name: BACKEND_STORE_URI
+              value: "postgresql://mlflow:$(POSTGRES_PASSWORD)@mlflow-db:5432/mlflow"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: mlflow-db-secret, key: POSTGRES_PASSWORD }
+            - name: ARTIFACT_ROOT
+              value: "s3://legal-contracts/mlflow-artifacts"
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef: { name: legal-backend-secrets, key: AWS_ACCESS_KEY_ID }
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef: { name: legal-backend-secrets, key: AWS_SECRET_ACCESS_KEY }
+          readinessProbe:
+            httpGet: { path: /health, port: 5000 }
+            initialDelaySeconds: 10
+          resources:
+            requests: { cpu: 250m, memory: 512Mi }
+            limits: { cpu: "1", memory: 1Gi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mlflow
+  namespace: mlflow
+spec:
+  selector: { app: mlflow }
+  ports: [{ port: 5000, targetPort: 5000 }]
+---
+# Cluster-internal DNS alias so app namespaces can reach MLflow via
+# `mlflow.internal` (matches Jenkinsfile's MLFLOW_TRACKING_URI) without
+# needing the full `mlflow.mlflow.svc.cluster.local` form everywhere.
+apiVersion: v1
+kind: Service
+metadata:
+  name: mlflow-internal-alias
+  namespace: mlflow
+spec:
+  type: ExternalName
+  externalName: mlflow.mlflow.svc.cluster.local

@@ -1,1 +1,53 @@
-# Celery worker Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: legal-worker
+  labels:
+    app: legal-worker
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: legal-worker
+  template:
+    metadata:
+      labels:
+        app: legal-worker
+    spec:
+      containers:
+        - name: legal-worker
+          image: legal-backend:latest  # same image, different command
+          command: ["celery", "-A", "app.workers.celery_app", "worker", "-Q", "pipeline", "-c", "2", "-l", "info"]
+          envFrom:
+            - configMapRef:
+                name: legal-backend-config
+            - secretRef:
+                name: legal-backend-secrets
+          readinessProbe:
+            exec:
+              command: ["celery", "-A", "app.workers.celery_app", "inspect", "ping", "-d", "celery@$HOSTNAME"]
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          resources:
+            requests: { cpu: 250m, memory: 512Mi }
+            limits: { cpu: "1", memory: 1Gi }
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: legal-worker-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: legal-worker
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target: { type: Utilization, averageUtilization: 75 }
+  # NOTE: for true queue-depth-based scaling, install KEDA and replace this
+  # HPA with a KEDA ScaledObject targeting the Redis "pipeline" queue length.
+  # See k8s/base/worker-scaledobject.yaml for the KEDA alternative.

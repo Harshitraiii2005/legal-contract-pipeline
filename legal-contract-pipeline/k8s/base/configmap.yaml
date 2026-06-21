@@ -1,1 +1,22 @@
-# Non-secret config values
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: legal-backend-config
+  labels:
+    app: legal-backend
+data:
+  ENV: "production"
+  DEBUG: "false"
+  ANTHROPIC_MODEL: "claude-opus-4-6"
+  PINECONE_ENV: "us-east-1-aws"
+  PINECONE_INDEX: "contract-clauses"
+  S3_REGION: "us-east-1"
+  S3_BUCKET: "legal-contracts"
+  CORS_ORIGINS: "https://app.legalai.example.com"
+  MAX_UPLOAD_MB: "50"
+  ACCESS_TOKEN_EXPIRE_MINUTES: "480"
+  REFRESH_TOKEN_EXPIRE_DAYS: "30"
+  SMTP_HOST: "smtp.sendgrid.net"
+  SMTP_PORT: "587"
+  FROM_EMAIL: "noreply@legalai.example.com"
+  MLFLOW_TRACKING_URI: "http://mlflow.legal-pipeline.svc.cluster.local:5000"

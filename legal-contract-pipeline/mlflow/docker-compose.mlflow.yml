@@ -1,0 +1,42 @@
+# Local-only MLflow tracking server, for running evals.py against your dev
+# machine without needing the in-cluster MLflow deployment.
+#
+# Usage:
+#   docker compose -f mlflow/docker-compose.mlflow.yml up -d
+#   MLFLOW_TRACKING_URI=http://localhost:5000 python evals/run_evals.py
+#   open http://localhost:5000   # MLflow UI
+
+version: "3.9"
+
+services:
+  mlflow-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: mlflow
+      POSTGRES_PASSWORD: mlflow
+      POSTGRES_DB: mlflow
+    volumes:
+      - mlflow_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mlflow"]
+      interval: 5s
+      retries: 10
+
+  mlflow:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "5000:5000"
+    environment:
+      BACKEND_STORE_URI: "postgresql://mlflow:mlflow@mlflow-db:5432/mlflow"
+      ARTIFACT_ROOT: "/mlartifacts"
+    volumes:
+      - mlflow_artifacts:/mlartifacts
+    depends_on:
+      mlflow-db:
+        condition: service_healthy
+
+volumes:
+  mlflow_db_data:
+  mlflow_artifacts:

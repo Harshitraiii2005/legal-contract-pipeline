@@ -1,0 +1,31 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: legal-local
+
+resources:
+  - ../../base
+  - secret.local.yaml  # dummy secrets, safe to commit — local only
+
+# Local clusters (kind/minikube) typically lack an ingress controller and a
+# NetworkPolicy-enforcing CNI, so those base resources are removed below via
+# the $patch: delete directive, and services are exposed as NodePort instead.
+patches:
+  - path: replica-patch.yaml
+  - path: nodeport-patch.yaml
+  - path: delete-ingress.yaml
+  - path: delete-network-policy.yaml
+
+images:
+  - name: legal-backend
+    newTag: dev
+  - name: legal-frontend
+    newTag: dev
+
+configMapGenerator:
+  - name: legal-backend-config
+    behavior: merge
+    literals:
+      - ENV=development
+      - DEBUG=true
+      - CORS_ORIGINS=http://localhost:3000

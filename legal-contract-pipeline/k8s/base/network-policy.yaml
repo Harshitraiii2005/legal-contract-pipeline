@@ -1,0 +1,33 @@
+# Defense-in-depth: only the backend and worker pods may talk to Postgres/Redis.
+# Nothing else in the namespace (including the frontend) gets a direct DB connection.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: restrict-db-access
+spec:
+  podSelector:
+    matchLabels:
+      app: postgres
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - podSelector: { matchLabels: { app: legal-backend } }
+        - podSelector: { matchLabels: { app: legal-worker } }
+      ports:
+        - port: 5432
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: restrict-redis-access
+spec:
+  podSelector:
+    matchLabels:
+      app: redis
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - podSelector: { matchLabels: { app: legal-backend } }
+        - podSelector: { matchLabels: { app: legal-worker } }
+      ports:
+        - port: 6379

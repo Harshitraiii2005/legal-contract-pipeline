@@ -1,0 +1,59 @@
+MASTER SOFTWARE DEVELOPMENT AGREEMENT
+
+This Master Software Development Agreement ("Agreement") is entered into as of January 1, 2024,
+between Acme Corp, a Delaware corporation ("Company"), and Client Inc., a California corporation ("Client").
+
+1. SERVICES
+1.1 The Company shall provide software development services ("Services") as described in each
+Statement of Work ("SOW") executed by both parties.
+1.2 Company shall perform the Services in a professional and workmanlike manner consistent with
+industry standards.
+
+2. PAYMENT
+2.1 Client shall pay all invoices within thirty (30) days of receipt.
+2.2 Late payments shall accrue interest at the rate of one and one-half percent (1.5%) per month,
+or the maximum rate permitted by law, whichever is less.
+2.3 Client shall reimburse Company for all pre-approved expenses.
+
+3. INTELLECTUAL PROPERTY
+3.1 All work product, inventions, and deliverables created by Company under this Agreement shall
+be considered works made for hire and shall be the sole and exclusive property of Client.
+3.2 Company hereby irrevocably assigns to Client all right, title, and interest in and to
+all Deliverables, including all intellectual property rights therein, in perpetuity throughout
+the universe, without any compensation beyond the fees set forth herein.
+
+4. CONFIDENTIALITY
+4.1 Each party agrees to keep confidential all non-public information received from the other party.
+4.2 These obligations shall survive termination of this Agreement indefinitely.
+
+5. INDEMNIFICATION
+5.1 Client shall indemnify, defend, and hold harmless Company and its affiliates, officers,
+directors, employees, agents, and successors from and against any and all claims, damages,
+losses, liabilities, costs, and expenses (including reasonable attorneys' fees) arising out of
+or relating to: (a) Client's use of the Services or Deliverables; (b) any breach by Client of
+this Agreement; (c) any negligence or willful misconduct by Client; or (d) any third-party claims
+related to Client's business operations.
+
+6. LIMITATION OF LIABILITY
+6.1 IN NO EVENT SHALL EITHER PARTY BE LIABLE TO THE OTHER FOR ANY INDIRECT, INCIDENTAL, SPECIAL,
+EXEMPLARY, PUNITIVE, OR CONSEQUENTIAL DAMAGES, INCLUDING LOST PROFITS, HOWEVER CAUSED AND UNDER
+ANY THEORY OF LIABILITY.
+6.2 COMPANY'S TOTAL CUMULATIVE LIABILITY ARISING OUT OF OR RELATED TO THIS AGREEMENT SHALL NOT
+EXCEED THE AMOUNTS PAID BY CLIENT TO COMPANY IN THE TWELVE (12) MONTHS PRECEDING THE CLAIM.
+
+7. TERMINATION
+7.1 Either party may terminate this Agreement upon thirty (30) days written notice.
+7.2 Company may terminate immediately upon Client's material breach.
+7.3 Upon termination, all licenses granted herein shall immediately terminate.
+
+8. GOVERNING LAW AND DISPUTE RESOLUTION
+8.1 This Agreement shall be governed by the laws of the State of Delaware, without regard to
+conflict of law principles.
+8.2 Any dispute shall be resolved by binding arbitration in Wilmington, Delaware under the rules
+of the American Arbitration Association.
+
+9. ASSIGNMENT
+9.1 Neither party may assign this Agreement without the prior written consent of the other party,
+except that Company may assign to an affiliate or successor.
+
+IN WITNESS WHEREOF, the parties have executed this Agreement as of the date first written above.

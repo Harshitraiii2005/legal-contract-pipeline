@@ -1,0 +1,39 @@
+# jenkins/ci-services.yml
+# Ephemeral Postgres + Redis used ONLY during the "Backend: Unit + Integration Tests"
+# Jenkins stage. Spin up before the test stage, tear down after.
+#
+# Usage from a Jenkins agent shell step:
+#   docker compose -f jenkins/ci-services.yml -p legal-ci up -d
+#   ... run tests against postgres-ci:5432 / redis-ci:6379 ...
+#   docker compose -f jenkins/ci-services.yml -p legal-ci down -v
+
+version: "3.9"
+
+networks:
+  jenkins-net:
+    name: jenkins-net
+    external: true   # created once on the Jenkins host: `docker network create jenkins-net`
+
+services:
+  postgres-ci:
+    image: postgres:16-alpine
+    networks: [jenkins-net]
+    environment:
+      POSTGRES_USER: legal
+      POSTGRES_PASSWORD: legal
+      POSTGRES_DB: legaldb_test
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U legal"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    tmpfs:
+      - /var/lib/postgresql/data   # throwaway, faster CI
+
+  redis-ci:
+    image: redis:7-alpine
+    networks: [jenkins-net]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 10

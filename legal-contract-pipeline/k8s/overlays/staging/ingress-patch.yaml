@@ -1,0 +1,29 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: legal-pipeline-ingress
+spec:
+  tls:
+    - hosts:
+        - staging.legalai.example.com
+        - api-staging.legalai.example.com
+      secretName: legal-pipeline-staging-tls
+  rules:
+    - host: staging.legalai.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: legal-frontend
+                port: { number: 80 }
+    - host: api-staging.legalai.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: legal-backend
+                port: { number: 8000 }

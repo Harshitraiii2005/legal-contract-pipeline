@@ -1,1 +1,36 @@
-# nginx-ingress routing rules
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: legal-pipeline-ingress
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"        # match MAX_UPLOAD_MB
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "120"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "120"
+    nginx.ingress.kubernetes.io/websocket-services: "legal-backend"
+spec:
+  tls:
+    - hosts:
+        - app.legalai.example.com
+        - api.legalai.example.com
+      secretName: legal-pipeline-tls
+  rules:
+    - host: app.legalai.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: legal-frontend
+                port: { number: 80 }
+    - host: api.legalai.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: legal-backend
+                port: { number: 8000 }

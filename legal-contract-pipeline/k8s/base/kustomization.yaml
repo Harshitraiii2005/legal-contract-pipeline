@@ -1,1 +1,29 @@
-# Lists all base resources
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - postgres.yaml
+  - redis.yaml
+  - backend-deployment.yaml
+  - worker-deployment.yaml
+  - frontend-deployment.yaml
+  - ingress.yaml
+  - network-policy.yaml
+  - migration-job.yaml
+  # secret.example.yaml is intentionally NOT included here — real secrets are
+  # provisioned per-environment via External Secrets Operator / Sealed Secrets,
+  # or manually for local testing. See secret.example.yaml for the expected keys.
+
+images:
+  - name: legal-backend
+    newName: legal-backend
+    newTag: latest
+  - name: legal-frontend
+    newName: legal-frontend
+    newTag: latest
+
+commonLabels:
+  app.kubernetes.io/part-of: legal-contract-pipeline
+  app.kubernetes.io/managed-by: kustomize

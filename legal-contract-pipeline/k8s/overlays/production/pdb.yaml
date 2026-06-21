@@ -1,0 +1,29 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: legal-backend-pdb
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: legal-backend
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: legal-worker-pdb
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: legal-worker
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: legal-frontend-pdb
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: legal-frontend

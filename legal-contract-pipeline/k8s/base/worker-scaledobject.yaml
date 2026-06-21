@@ -1,0 +1,21 @@
+# Optional: requires KEDA (https://keda.sh) installed in-cluster.
+# Scales legal-worker based on the depth of the Celery "pipeline" queue in Redis,
+# which is a much better signal than CPU for bursty contract-upload workloads.
+#
+# To use: delete/disable the HPA in worker-deployment.yaml and apply this instead.
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: legal-worker-scaledobject
+spec:
+  scaleTargetRef:
+    name: legal-worker
+  minReplicaCount: 1
+  maxReplicaCount: 12
+  cooldownPeriod: 120
+  triggers:
+    - type: redis
+      metadata:
+        address: redis.legal-pipeline.svc.cluster.local:6379
+        listName: pipeline
+        listLength: "5"   # target: 5 queued tasks per replica
