@@ -25,11 +25,17 @@ class Settings(BaseSettings):
     REDIS_URL: RedisDsn = Field(default="redis://localhost:6379/0")
 
     # ── Anthropic ─────────────────────────────────────────────────────────
-    ANTHROPIC_API_KEY: str = Field(...)
-    ANTHROPIC_MODEL: str = "claude-opus-4-6"
+    # Optional at startup — required only by code paths that actually call
+    # Claude (the review-pipeline agents). Leaving this unset lets the rest
+    # of the app (auth, upload, storage) run; agent calls will fail with an
+    # auth error if invoked without a real key.
+    GROQ_API_KEY: str = ""
+    GROQ_MODEL: str = "llama-3.3-70b-versatile"
 
     # ── Pinecone ──────────────────────────────────────────────────────────
-    PINECONE_API_KEY: str = Field(...)
+    # Optional for the same reason — required only by the Risk Scorer's RAG
+    # lookup, not by app startup.
+    PINECONE_API_KEY: str = ""
     PINECONE_ENV: str = "us-east-1-aws"
     PINECONE_INDEX: str = "contract-clauses"
 
@@ -41,11 +47,8 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 8  # 8 hours
     REFRESH_TOKEN_EXPIRE_DAYS: int = 30
 
-    # ── Storage ───────────────────────────────────────────────────────────
-    S3_BUCKET: str = "legal-contracts"
-    S3_REGION: str = "us-east-1"
-    AWS_ACCESS_KEY_ID: str = ""
-    AWS_SECRET_ACCESS_KEY: str = ""
+    # ── Storage (local disk) ──────────────────────────────────────────────
+    STORAGE_ROOT: str = "/data/legal-pipeline"
 
     # ── Email ─────────────────────────────────────────────────────────────
     SMTP_HOST: str = "smtp.sendgrid.net"
@@ -67,6 +70,7 @@ class Settings(BaseSettings):
         env_file = ".env"
         env_file_encoding = "utf-8"
         case_sensitive = True
+        extra = "ignore"  # tolerate leftover/experimental env vars (e.g. GROQ_*, S3_*) without crashing
 
 
 @lru_cache(maxsize=1)

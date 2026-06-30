@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import boto3
 from celery import Task
+from celery.signals import worker_process_init
 
 from app.workers.celery_app import celery_app
 from app.core.config import settings
 from app.core.database import SessionLocal
 from app.core.logging import get_logger
-from app.graph.orchestrator import get_orchestrator
+from app.graph.orchestrator import get_orchestrator, reset_orchestrator
 from app.models.audit_log import write_audit_event
 from app.models.contract import Contract
 from app.models.review import Review
@@ -20,10 +21,20 @@ from app.graph.state import FinalReport
 
 logger = get_logger(__name__)
 email_svc = EmailService()
+_s3_client = None
 
+
+# ── Fork safety ───────────────────────────────────────────────────────────────
+
+@worker_process_init.connect
+def reset_after_fork(**kwargs):
+    """Force fresh DB pool and orchestrator in every Celery worker after fork."""
+    reset_orchestrator()
+
+
+# ── Task ──────────────────────────────────────────────────────────────────────
 
 class PipelineTask(Task):
-    """Base task with automatic DB session management."""
     abstract = True
 
     def on_failure(self, exc, task_id, args, kwargs, einfo):
@@ -55,7 +66,6 @@ def run_review_pipeline(
 
     db = SessionLocal()
     try:
-        # Mark as processing
         contract = db.get(Contract, contract_id)
         if not contract:
             raise ValueError(f"Contract {contract_id} not found")
@@ -87,7 +97,7 @@ def run_review_pipeline(
         )
         db.add(review)
 
-        # Build and upload artefacts
+        # Build and save artefacts to local storage
         if report:
             docx_bytes = build_redlined_docx(
                 contract_name,
@@ -99,8 +109,9 @@ def run_review_pipeline(
 
             docx_key = f"outputs/{contract_id}/redlined.docx"
             pdf_key = f"outputs/{contract_id}/risk_report.pdf"
-            _s3_put(docx_bytes, docx_key, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
-            _s3_put(pdf_bytes, pdf_key, "application/pdf")
+            from app.api.services import local_storage
+            local_storage.put(docx_bytes, docx_key, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+            local_storage.put(pdf_bytes, pdf_key, "application/pdf")
 
             review.redlined_docx_key = docx_key
             review.risk_pdf_key = pdf_key
@@ -119,13 +130,16 @@ def run_review_pipeline(
             agent_name="orchestrator",
             payload={"overall_score": contract.overall_risk_score, "thread_id": thread_id},
         )
+
+        # Read all fields BEFORE closing session
+        owner_email = contract.owner.email
+        owner_name = contract.owner.full_name or contract.owner.email
+        _contract_name = contract.name
+        _contract_id = contract.id
+        _overall_score = review.overall_score
+        _risk_score = contract.overall_risk_score
+
         db.commit()
-
-        # Notify lawyer
-        _notify_reviewer(contract, review)
-
-        logger.info("task_complete", contract_id=contract_id, score=contract.overall_risk_score)
-        return {"contract_id": contract_id, "status": "awaiting_approval"}
 
     except Exception as exc:
         db.rollback()
@@ -134,27 +148,45 @@ def run_review_pipeline(
     finally:
         db.close()
 
+    # Notify outside the session — all needed data already extracted
+    _notify_reviewer(_contract_name, _overall_score, _contract_id, owner_email, owner_name)
+
+    logger.info("task_complete", contract_id=contract_id, score=_risk_score)
+    return {"contract_id": contract_id, "status": "awaiting_approval"}
+
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+def _get_s3():
+    global _s3_client
+    if _s3_client is None:
+        _s3_client = boto3.client(
+            "s3",
+            region_name=settings.S3_REGION,
+            aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
+            aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
+        )
+    return _s3_client
+
+
 def _s3_put(data: bytes, key: str, content_type: str) -> None:
-    s3 = boto3.client(
-        "s3",
-        region_name=settings.S3_REGION,
-        aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
-        aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
-    )
-    s3.put_object(Bucket=settings.S3_BUCKET, Key=key, Body=data, ContentType=content_type)
+    _get_s3().put_object(Bucket=settings.S3_BUCKET, Key=key, Body=data, ContentType=content_type)
 
 
-def _notify_reviewer(contract, review) -> None:
+def _notify_reviewer(
+    contract_name: str,
+    overall_score: float,
+    contract_id: str,
+    owner_email: str,
+    owner_name: str,
+) -> None:
     try:
-        review_url = f"https://app.legalai.example.com/review/{contract.id}"
+        review_url = f"https://app.legalai.example.com/review/{contract_id}"
         email_svc.send_review_ready(
-            to=contract.owner.email,
-            reviewer_name=contract.owner.full_name or contract.owner.email,
-            contract_name=contract.name,
-            overall_score=review.overall_score,
+            to=owner_email,
+            reviewer_name=owner_name,
+            contract_name=contract_name,
+            overall_score=overall_score,
             review_url=review_url,
         )
     except Exception as exc:

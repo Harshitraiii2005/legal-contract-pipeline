@@ -26,12 +26,38 @@ function processQueue(error: unknown, token: string | null) {
   failedQueue = [];
 }
 
+// Endpoints that should NEVER trigger the refresh-and-retry flow below.
+// A 401 from /auth/login means "wrong credentials" — there is no token to
+// refresh, and trying to refresh (with a null refresh_token) was previously
+// causing a hard redirect to /login that wiped the error message before
+// React could render it. /auth/register and /auth/refresh have the same
+// problem for the same reason.
+const AUTH_ENDPOINTS = ["/auth/login", "/auth/register", "/auth/refresh"];
+
+function isAuthEndpoint(url?: string): boolean {
+  return Boolean(url && AUTH_ENDPOINTS.some((p) => url.includes(p)));
+}
+
 apiClient.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
     const original = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
 
+    // Let auth endpoints fail normally — the caller's own try/catch (e.g.
+    // Login.tsx) handles displaying "Invalid credentials" etc.
+    if (isAuthEndpoint(original?.url)) {
+      return Promise.reject(error);
+    }
+
     if (error.response?.status === 401 && !original._retry) {
+      const hasRefreshToken = Boolean(localStorage.getItem("refresh_token"));
+
+      // No refresh token means the user was never logged in — there is
+      // nothing to refresh, so don't attempt it or redirect; just fail.
+      if (!hasRefreshToken) {
+        return Promise.reject(error);
+      }
+
       if (isRefreshing) {
         return new Promise((resolve, reject) => {
           failedQueue.push({ resolve, reject });

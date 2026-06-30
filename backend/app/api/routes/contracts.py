@@ -5,12 +5,12 @@ from __future__ import annotations
 import uuid
 from typing import Annotated
 
-import boto3
 from fastapi import APIRouter, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from app.api.deps import CurrentUser, DbSession, require
+from app.api.services import local_storage
 from app.api.services.document_parser import parse_document
 from app.core.config import settings
 from app.core.logging import get_logger
@@ -21,8 +21,6 @@ from app.workers.tasks import run_review_pipeline
 logger = get_logger(__name__)
 router = APIRouter(prefix="/contracts", tags=["contracts"])
 
-
-# ── Schemas ───────────────────────────────────────────────────────────────────
 
 class ContractOut(BaseModel):
     id: str
@@ -36,8 +34,6 @@ class ContractOut(BaseModel):
         from_attributes = True
 
 
-# ── Upload ────────────────────────────────────────────────────────────────────
-
 @router.post("/upload", response_model=ContractOut, status_code=status.HTTP_201_CREATED)
 async def upload_contract(
     file: Annotated[UploadFile, File(description="PDF or DOCX contract")],
@@ -50,24 +46,25 @@ async def upload_contract(
     content = await file.read()
     contract_id = str(uuid.uuid4())
 
-    # Parse text
     try:
         raw_text = parse_document(content, file.filename or "contract.pdf")
     except Exception as exc:
         raise HTTPException(422, detail=f"Could not parse document: {exc}")
 
-    # Upload to S3
-    s3_key = f"contracts/{user.id}/{contract_id}/{file.filename}"
-    _upload_to_s3(content, s3_key, file.content_type or "application/octet-stream")
+    storage_key = f"contracts/{user.id}/{contract_id}/{file.filename}"
+    try:
+        local_storage.put(content, storage_key, file.content_type or "application/octet-stream")
+    except Exception as exc:
+        logger.error("local_storage_upload_failed", key=storage_key, error=str(exc))
+        raise HTTPException(500, detail="Could not save uploaded file")
 
-    # Persist contract record
     contract = Contract(
         id=contract_id,
         owner_id=user.id,
         name=file.filename or "Unnamed Contract",
         original_filename=file.filename or "",
         file_type=(file.filename or "").rsplit(".", 1)[-1].lower(),
-        s3_key=s3_key,
+        storage_key=storage_key,
         raw_text=raw_text,
         status="pending",
     )
@@ -83,14 +80,11 @@ async def upload_contract(
     db.commit()
     db.refresh(contract)
 
-    # Kick off Celery task
     run_review_pipeline.delay(contract_id, raw_text, file.filename or "", user.id)
     logger.info("contract_queued", contract_id=contract_id)
 
     return contract
 
-
-# ── List ──────────────────────────────────────────────────────────────────────
 
 @router.get("/", response_model=list[ContractOut])
 def list_contracts(
@@ -109,15 +103,11 @@ def list_contracts(
     )
 
 
-# ── Single contract ───────────────────────────────────────────────────────────
-
 @router.get("/{contract_id}", response_model=ContractOut)
 def get_contract(contract_id: str, user: CurrentUser, db: DbSession):
     contract = _get_or_404(db, contract_id, user.id)
     return contract
 
-
-# ── Download redlined DOCX ────────────────────────────────────────────────────
 
 @router.get("/{contract_id}/download/redline")
 def download_redline(contract_id: str, user: CurrentUser, db: DbSession):
@@ -125,7 +115,11 @@ def download_redline(contract_id: str, user: CurrentUser, db: DbSession):
     if not contract.review or not contract.review.redlined_docx_key:
         raise HTTPException(404, detail="Redlined DOCX not yet generated")
 
-    stream = _download_from_s3(contract.review.redlined_docx_key)
+    try:
+        stream = local_storage.get(contract.review.redlined_docx_key)
+    except FileNotFoundError:
+        raise HTTPException(404, detail="Redlined DOCX file is missing from storage")
+
     return StreamingResponse(
         stream,
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -139,15 +133,17 @@ def download_report(contract_id: str, user: CurrentUser, db: DbSession):
     if not contract.review or not contract.review.risk_pdf_key:
         raise HTTPException(404, detail="Risk report PDF not yet generated")
 
-    stream = _download_from_s3(contract.review.risk_pdf_key)
+    try:
+        stream = local_storage.get(contract.review.risk_pdf_key)
+    except FileNotFoundError:
+        raise HTTPException(404, detail="Risk report PDF file is missing from storage")
+
     return StreamingResponse(
         stream,
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="risk_report_{contract.name}.pdf"'},
     )
 
-
-# ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _get_or_404(db, contract_id: str, user_id: str) -> Contract:
     contract = db.query(Contract).filter(
@@ -156,29 +152,3 @@ def _get_or_404(db, contract_id: str, user_id: str) -> Contract:
     if not contract:
         raise HTTPException(404, detail="Contract not found")
     return contract
-
-
-def _upload_to_s3(content: bytes, key: str, content_type: str) -> None:
-    try:
-        s3 = boto3.client(
-            "s3",
-            region_name=settings.S3_REGION,
-            aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
-            aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
-        )
-        s3.put_object(Bucket=settings.S3_BUCKET, Key=key, Body=content, ContentType=content_type)
-    except Exception as exc:
-        logger.error("s3_upload_failed", key=key, error=str(exc))
-        raise
-
-
-def _download_from_s3(key: str):
-    import io
-    s3 = boto3.client(
-        "s3",
-        region_name=settings.S3_REGION,
-        aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
-        aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
-    )
-    obj = s3.get_object(Bucket=settings.S3_BUCKET, Key=key)
-    return io.BytesIO(obj["Body"].read())

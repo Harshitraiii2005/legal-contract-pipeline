@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import time
+from urllib import response
 import uuid
 from abc import ABC, abstractmethod
 from typing import Any
 
 import structlog
-from anthropic import Anthropic, APIError, RateLimitError
+from groq import Groq
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 from app.core.config import settings
@@ -16,13 +17,13 @@ from app.core.logging import get_logger
 
 logger = get_logger(__name__)
 
-_client: Anthropic | None = None
+_client: Groq | None = None
 
 
-def get_anthropic_client() -> Anthropic:
+def get_groq_client() -> Groq:
     global _client
     if _client is None:
-        _client = Anthropic(api_key=settings.ANTHROPIC_API_KEY)
+        _client = Groq(api_key=settings.GROQ_API_KEY)
     return _client
 
 
@@ -30,12 +31,12 @@ class BaseAgent(ABC):
     """Abstract base for all pipeline agents."""
 
     agent_name: str = "base_agent"
-    model: str = "claude-opus-4-6"
+    model: str = "llama-3.3-70b-versatile"
     max_tokens: int = 4096
 
     def __init__(self) -> None:
         self.log = get_logger(self.__class__.__name__)
-        self.client = get_anthropic_client()
+        self.client = get_groq_client()
 
     # ------------------------------------------------------------------ #
     # Public interface                                                      #
@@ -89,7 +90,7 @@ class BaseAgent(ABC):
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=2, max=30),
-        retry=retry_if_exception_type((RateLimitError, APIError)),
+        retry=retry_if_exception_type(Exception),
         reraise=True,
     )
     def _call_llm(
@@ -100,14 +101,23 @@ class BaseAgent(ABC):
         max_tokens: int | None = None,
     ) -> str:
         """Call Claude with automatic retry on transient errors."""
-        response = self.client.messages.create(
-            model=self.model,
-            max_tokens=max_tokens or self.max_tokens,
-            temperature=temperature,
-            system=system_override or self._system_prompt(),
-            messages=[{"role": "user", "content": user_prompt}],
-        )
-        return response.content[0].text
+        response = self.client.chat.completions.create(
+        model=self.model,
+        temperature=temperature,
+        max_completion_tokens=max_tokens or self.max_tokens,
+        messages=[
+            {
+                "role": "system",
+                "content": system_override or self._system_prompt(),
+            },
+            {
+                "role": "user",
+                "content": user_prompt,
+            },
+        ],
+    )
+
+        return response.choices[0].message.content
 
     def _call_llm_json(self, user_prompt: str, **kwargs) -> Any:
         """Call LLM and parse JSON response, stripping markdown fences."""

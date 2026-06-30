@@ -115,3 +115,13 @@ class ContractReviewState(BaseModel):
     class Config:
         # Allow arbitrary types for LangGraph compatibility
         arbitrary_types_allowed = True
+
+    def __getitem__(self, key: str):
+        return getattr(self, key)
+
+    def __setitem__(self, key: str, value):
+        setattr(self, key, value)
+
+    def get(self, key: str, default=None):
+        return getattr(self, key, default)
+

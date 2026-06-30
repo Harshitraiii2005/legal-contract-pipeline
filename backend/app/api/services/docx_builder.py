@@ -9,7 +9,7 @@ from docx import Document
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Pt, RGBColor
-from docx.util import Inches
+from docx.shared import Inches
 
 from app.graph.state import ClauseExtract, RedlineEdit
 from app.core.logging import get_logger

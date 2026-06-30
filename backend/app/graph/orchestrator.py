@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
 from typing import Any
 
 from langgraph.checkpoint.postgres import PostgresSaver
-from psycopg2.pool import ThreadedConnectionPool
+from psycopg_pool import ConnectionPool
 
 from app.graph.pipeline import build_graph
 from app.graph.state import ApprovalDecision, ContractReviewState
@@ -17,11 +16,30 @@ from app.core.logging import get_logger
 
 logger = get_logger(__name__)
 
+# Module-level pool — created once per process, safe across threads
+_pool: ConnectionPool | None = None
+
+
+def _get_pool() -> ConnectionPool:
+    global _pool
+    if _pool is None:
+        db_url = get_db_url()
+        # psycopg (v3) expects postgresql:// not postgres://
+        conninfo = db_url.replace("postgres://", "postgresql://")
+        _pool = ConnectionPool(
+            conninfo=conninfo,
+            max_size=10,
+            kwargs={"autocommit": True},
+            open=True,
+        )
+        logger.info("db_pool_created")
+    return _pool
+
 
 def _make_checkpointer() -> PostgresSaver:
-    pool = ThreadedConnectionPool(1, 10, get_db_url())
+    pool = _get_pool()
     cp = PostgresSaver(pool)
-    cp.setup()  # Creates checkpoint tables if they don't exist
+    cp.setup()  # idempotent — creates tables if not present
     return cp
 
 
@@ -59,9 +77,7 @@ class PipelineOrchestrator:
 
         logger.info("pipeline_start", contract_id=contract_id, thread_id=thread_id)
 
-        # Run until interrupt
         result = self.graph.invoke(initial_state.dict(), config=config)
-
         return {"thread_id": thread_id, "state": result}
 
     # ------------------------------------------------------------------ #
@@ -84,7 +100,6 @@ class PipelineOrchestrator:
             reviewer_notes=notes,
         )
 
-        # Update state with the decision, then resume
         update = {"approval": decision.dict(), "awaiting_approval": False}
         result = self.graph.invoke(update, config=config)
 
@@ -108,12 +123,18 @@ class PipelineOrchestrator:
     def list_checkpoints(self, thread_id: str) -> list[dict]:
         config = {"configurable": {"thread_id": thread_id}}
         return [
-            {"checkpoint_id": c.config["configurable"]["checkpoint_id"], "ts": c.metadata.get("created_at")}
+            {
+                "checkpoint_id": c.config["configurable"]["checkpoint_id"],
+                "ts": c.metadata.get("created_at"),
+            }
             for c in self.graph.get_state_history(config)
         ]
 
 
-# Singleton
+# ------------------------------------------------------------------ #
+# Per-process singleton — recreated fresh after Celery fork            #
+# ------------------------------------------------------------------ #
+
 _orchestrator: PipelineOrchestrator | None = None
 
 
@@ -122,3 +143,10 @@ def get_orchestrator() -> PipelineOrchestrator:
     if _orchestrator is None:
         _orchestrator = PipelineOrchestrator()
     return _orchestrator
+
+
+def reset_orchestrator() -> None:
+    """Call this in Celery's worker_process_init signal to force fresh state after fork."""
+    global _orchestrator, _pool
+    _orchestrator = None
+    _pool = None

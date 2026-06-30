@@ -19,7 +19,7 @@ class Contract(Base):
     name: Mapped[str] = mapped_column(String(500), nullable=False)
     original_filename: Mapped[str] = mapped_column(String(500), default="")
     file_type: Mapped[str] = mapped_column(String(20), default="pdf")  # pdf | docx
-    s3_key: Mapped[str] = mapped_column(String(1000), default="")
+    storage_key: Mapped[str] = mapped_column(String(1000), default="")
     raw_text: Mapped[str] = mapped_column(Text, default="")
     clause_count: Mapped[int] = mapped_column(Integer, default=0)
     overall_risk_score: Mapped[int] = mapped_column(Integer, default=0)

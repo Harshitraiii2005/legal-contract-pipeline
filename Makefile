@@ -102,3 +102,6 @@ clean:
 	find backend -type f -name "*.pyc" -delete
 	rm -rf frontend/node_modules frontend/dist
 	rm -rf backend/.pytest_cache backend/.ruff_cache backend/htmlcov backend/coverage.xml
+
+dev-worker:
+	cd backend && celery -A app.workers.celery_app worker -Q pipeline -c 2 -l info

@@ -86,17 +86,35 @@ def login(body: LoginRequest, db: DbSession):
 
 @router.post("/refresh", response_model=TokenResponse)
 def refresh_token(body: dict, db: DbSession):
-    token = body.get("refresh_token", "")
+    token = body.get("refresh_token")
+
+    if not token:
+        raise HTTPException(
+            status_code=401,
+            detail="Refresh token missing"
+        )
+
     try:
         payload = decode_token(token)
-    except ValueError:
-        raise HTTPException(status_code=401, detail="Invalid refresh token")
+    except Exception:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid refresh token"
+        )
+
     if payload.get("type") != "refresh":
-        raise HTTPException(status_code=401, detail="Not a refresh token")
+        raise HTTPException(
+            status_code=401,
+            detail="Not a refresh token"
+        )
 
     user = db.get(User, payload["sub"])
+
     if not user or not user.is_active:
-        raise HTTPException(status_code=401, detail="User not found")
+        raise HTTPException(
+            status_code=401,
+            detail="User not found"
+        )
 
     return TokenResponse(
         access_token=create_access_token(user.id, role=user.role),

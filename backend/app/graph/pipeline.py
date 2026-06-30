@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 from langgraph.graph import StateGraph, END
-from langgraph.checkpoint.postgres import PostgresSaver
 
 from app.agents.clause_extractor import ClauseExtractor
 from app.agents.risk_scorer import RiskScorer
@@ -14,18 +13,14 @@ from app.agents.compliance_checker import ComplianceChecker
 from app.agents.redliner import Redliner
 from app.agents.report_writer import ReportWriter
 from app.graph.state import ContractReviewState
-from app.core.config import settings
 from app.core.logging import get_logger
 
 logger = get_logger(__name__)
 
-# ── Node names ───────────────────────────────────────────────────────────────
 EXTRACT = "clause_extractor"
 PARALLEL_ANALYSIS = "parallel_analysis"
-AGGREGATE = "aggregate"
 REPORT = "report_writer"
 HUMAN_APPROVAL = "human_approval"
-DONE = END
 
 
 def _build_agents() -> dict:
@@ -38,54 +33,42 @@ def _build_agents() -> dict:
     }
 
 
-# ── Node functions ───────────────────────────────────────────────────────────
-
-def node_extract(state: dict[str, Any], agents: dict) -> dict[str, Any]:
-    """Serial: extract clauses first."""
+def node_extract(state: ContractReviewState, agents: dict) -> dict[str, Any]:
     return agents["extractor"].run(state)
 
 
-def node_parallel_analysis(state: dict[str, Any], agents: dict) -> dict[str, Any]:
-    """Run scorer, compliance, and redliner in parallel via asyncio."""
-    async def _run():
-        loop = asyncio.get_event_loop()
-        scorer_task = loop.run_in_executor(None, agents["scorer"].run, state)
-        compliance_task = loop.run_in_executor(None, agents["compliance"].run, state)
-        scored, compliant = await asyncio.gather(scorer_task, compliance_task)
+def node_parallel_analysis(state: ContractReviewState, agents: dict) -> dict[str, Any]:
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        scorer_future = executor.submit(agents["scorer"].run, state)
+        compliance_future = executor.submit(agents["compliance"].run, state)
+        scored = scorer_future.result()
+        compliant = compliance_future.result()
 
-        # Redliner needs scores + compliance results
-        merged = {**state, **scored, **compliant}
-        redline_task = loop.run_in_executor(None, agents["redliner"].run, merged)
-        redlined = await asyncio.gather(redline_task)
-        return {**scored, **compliant, **redlined[0]}
-
-    return asyncio.run(_run())
+    merged = {**state.dict(), **scored, **compliant}
+    merged_state = ContractReviewState(**merged)
+    redlined = agents["redliner"].run(merged_state)
+    return {**scored, **compliant, **redlined}
 
 
-def node_report(state: dict[str, Any], agents: dict) -> dict[str, Any]:
+def node_report(state: ContractReviewState, agents: dict) -> dict[str, Any]:
     return agents["reporter"].run(state)
 
 
-def node_human_approval(state: dict[str, Any]) -> dict[str, Any]:
-    """Interrupt node — graph pauses here until lawyer approves/rejects."""
+def node_human_approval(state: ContractReviewState) -> dict[str, Any]:
     logger.info("pipeline_awaiting_approval", contract_id=state.get("contract_id"))
     return {"awaiting_approval": True}
 
 
-def node_post_approval(state: dict[str, Any]) -> dict[str, Any]:
-    """Resume after human decision — just route."""
+def node_post_approval(state: ContractReviewState) -> dict[str, Any]:
     return {"awaiting_approval": False}
 
 
-# ── Routing ──────────────────────────────────────────────────────────────────
-
-def route_after_approval(state: dict[str, Any]) -> str:
-    if state.get("approval") and state["approval"]["approved"]:
+def route_after_approval(state: ContractReviewState) -> str:
+    approval = state.get("approval")
+    if approval and approval.get("approved"):
         return "finalize"
     return "rejected"
 
-
-# ── Graph factory ────────────────────────────────────────────────────────────
 
 def build_graph(checkpointer=None):
     agents = _build_agents()
@@ -100,13 +83,10 @@ def build_graph(checkpointer=None):
     graph.add_node("finalize", lambda s: {"pipeline_complete": True})
     graph.add_node("rejected", lambda s: {"pipeline_complete": True, "error": "Review rejected by lawyer"})
 
-    # Edges
     graph.set_entry_point(EXTRACT)
     graph.add_edge(EXTRACT, PARALLEL_ANALYSIS)
     graph.add_edge(PARALLEL_ANALYSIS, REPORT)
     graph.add_edge(REPORT, HUMAN_APPROVAL)
-
-    # Interrupt here — graph pauses until resume() is called
     graph.add_edge(HUMAN_APPROVAL, "post_approval")
 
     graph.add_conditional_edges(
@@ -119,5 +99,5 @@ def build_graph(checkpointer=None):
 
     return graph.compile(
         checkpointer=checkpointer,
-        interrupt_before=["post_approval"],  # pause before consuming approval
+        interrupt_before=["post_approval"],
     )

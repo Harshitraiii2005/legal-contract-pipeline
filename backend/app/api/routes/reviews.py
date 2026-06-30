@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
 
 from app.api.deps import CurrentUser, DbSession, require
+from app.models.user import User
 from app.api.services.email_service import EmailService
 from app.core.logging import get_logger
 from app.graph.orchestrator import get_orchestrator
@@ -74,7 +75,7 @@ def submit_approval(
     body: ApprovalRequest,
     user: CurrentUser,
     db: DbSession,
-    _: CurrentUser = require("approve"),
+    _: User = require("approve"),
 ):
     contract = db.query(Contract).filter(
         Contract.id == contract_id, Contract.owner_id == user.id
