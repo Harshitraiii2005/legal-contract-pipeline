@@ -30,10 +30,20 @@ CLAUSES = [
 @patch.object(RiskScorer, "_call_llm_json")
 def test_scores_all_clauses(mock_llm, scorer):
     mock_llm.return_value = {
-        "score": 82,
-        "severity": "high",
-        "reasoning": "Unlimited indemnification is extremely broad.",
-        "flags": ["unlimited indemnification", "no carve-outs"],
+        "results": [
+            {
+                "clause_id": 1,
+                "score": 82,
+                "reasoning": "Unlimited indemnification is extremely broad.",
+                "flags": ["unlimited indemnification", "no carve-outs"],
+            },
+            {
+                "clause_id": 2,
+                "score": 40,
+                "reasoning": "Standard cap.",
+                "flags": [],
+            }
+        ]
     }
 
     result = scorer.run({"clauses": CLAUSES})
@@ -48,7 +58,16 @@ def test_scores_all_clauses(mock_llm, scorer):
 @patch.object(RiskScorer, "_call_llm_json")
 def test_rag_context_included(mock_llm, scorer):
     """Verify that similar clause hits are passed to the LLM prompt."""
-    mock_llm.return_value = {"score": 50, "severity": "medium", "reasoning": "ok", "flags": []}
+    mock_llm.return_value = {
+        "results": [
+            {
+                "clause_id": 1,
+                "score": 50,
+                "reasoning": "ok",
+                "flags": [],
+            }
+        ]
+    }
 
     scorer.run({"clauses": [CLAUSES[0]]})
 
@@ -58,7 +77,16 @@ def test_rag_context_included(mock_llm, scorer):
 
 @patch.object(RiskScorer, "_call_llm_json")
 def test_rag_hits_stored_in_result(mock_llm, scorer):
-    mock_llm.return_value = {"score": 40, "severity": "medium", "reasoning": "test", "flags": []}
+    mock_llm.return_value = {
+        "results": [
+            {
+                "clause_id": 1,
+                "score": 40,
+                "reasoning": "test",
+                "flags": [],
+            }
+        ]
+    }
 
     result = scorer.run({"clauses": [CLAUSES[0]]})
     assert "abc123" in result["risk_scores"][0].rag_hits

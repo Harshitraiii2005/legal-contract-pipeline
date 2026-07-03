@@ -8,7 +8,7 @@ import pytest
 # Set test env vars before any app imports
 os.environ.setdefault("SECRET_KEY", "test-secret-key-at-least-32-characters-long")
 os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
-os.environ.setdefault("ANTHROPIC_API_KEY", "sk-ant-test-key")
+os.environ.setdefault("GROQ_API_KEY", "gsk_test_key")
 os.environ.setdefault("PINECONE_API_KEY", "test-pinecone-key")
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
 

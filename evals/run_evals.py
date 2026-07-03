@@ -71,7 +71,7 @@ def run_eval() -> dict[str, float]:
     per_example_results: list[dict[str, Any]] = []
 
     with mlflow.start_run(run_name=f"eval-{datetime.utcnow().strftime('%Y%m%d-%H%M%S')}"):
-        mlflow.log_param("model", settings.ANTHROPIC_MODEL)
+        mlflow.log_param("model", settings.GROQ_MODEL)
         mlflow.log_param("dataset", str(DATASET_PATH.name))
         mlflow.log_param("dataset_size", len(rows))
         mlflow.log_param("score_tolerance", SCORE_TOLERANCE)
@@ -90,6 +90,12 @@ def run_eval() -> dict[str, float]:
             correct_score += int(is_score_correct)
             correct_severity += int(is_severity_correct)
             abs_errors.append(abs_error)
+
+            print(
+                f"Index {i:2d} | Type: {row['clause_type']:15s} | "
+                f"Score: Expected={row['expected_score']:3d}, Predicted={prediction['score']:3d} {'✅' if is_score_correct else '❌'} | "
+                f"Severity: Expected={row['expected_severity']:8s}, Predicted={prediction['severity']:8s} {'✅' if is_severity_correct else '❌'}"
+            )
 
             per_example_results.append(
                 {

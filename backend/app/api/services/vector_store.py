@@ -48,23 +48,27 @@ class VectorStoreService:
         filter: dict | None = None,
     ) -> list[dict[str, Any]]:
         """Return top-k similar clauses with metadata."""
-        vec = self._embed(text)
-        response = self._index.query(
-            vector=vec,
-            top_k=top_k,
-            filter=filter,
-            include_metadata=True,
-        )
-        return [
-            {
-                "id": match.id,
-                "score": round(match.score, 4),
-                "text": match.metadata.get("text", ""),
-                "type": match.metadata.get("type", ""),
-                "risk_score": match.metadata.get("risk_score"),
-            }
-            for match in response.matches
-        ]
+        try:
+            vec = self._embed(text)
+            response = self._index.query(
+                vector=vec,
+                top_k=top_k,
+                filter=filter,
+                include_metadata=True,
+            )
+            return [
+                {
+                    "id": match.id,
+                    "score": round(match.score, 4),
+                    "text": match.metadata.get("text", ""),
+                    "type": match.metadata.get("type", ""),
+                    "risk_score": match.metadata.get("risk_score"),
+                }
+                for match in response.matches
+            ]
+        except Exception as e:
+            logger.warning("pinecone_query_failed", error=str(e), text=text[:100])
+            return []
 
     # ------------------------------------------------------------------ #
     # Upsert                                                               #

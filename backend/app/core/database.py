@@ -14,13 +14,16 @@ def get_db_url() -> str:
     return str(settings.DATABASE_URL)
 
 
-engine = create_engine(
-    get_db_url(),
-    pool_size=settings.DB_POOL_SIZE,
-    max_overflow=settings.DB_MAX_OVERFLOW,
-    pool_pre_ping=True,
-    echo=settings.DEBUG,
-)
+db_url = get_db_url()
+engine_kwargs = {
+    "pool_pre_ping": True,
+    "echo": settings.DEBUG,
+}
+if db_url.startswith("postgresql") or db_url.startswith("postgres"):
+    engine_kwargs["pool_size"] = settings.DB_POOL_SIZE
+    engine_kwargs["max_overflow"] = settings.DB_MAX_OVERFLOW
+
+engine = create_engine(db_url, **engine_kwargs)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 

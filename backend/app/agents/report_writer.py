@@ -23,10 +23,11 @@ Top compliance issues:
 {top_compliance}
 
 Write a professional executive summary (3–5 paragraphs) suitable for a general
-counsel to read in under 2 minutes. Include:
-1. Overall risk posture
-2. Most critical issues (by name)
-3. Recommended next steps
+counsel to read in under 2 minutes. Follow these guidelines strictly:
+1. Overall risk posture: Summarize the high-level legal risk of the contract.
+2. Most critical issues (by name): Focus ONLY on high/medium risk items. Do NOT mention low-risk or favorable terms (such as "favorable warranty" or "standard representations") as key risks.
+3. Compliance violations & Systemic Gaps: Consolidate repeated compliance gaps (e.g. lack of data protection/DPA provisions flagged across multiple clauses) into one systemic issue, rather than listing them as separate, independent violations.
+4. Actionable Next Steps: Provide concrete, specific recommendations with suggested cure periods, liability caps, or thresholds where appropriate, rather than generic advice.
 
 Plain text only — no JSON, no markdown headers.
 """.strip()
@@ -48,10 +49,11 @@ class ReportWriter(BaseAgent):
         high_risk = [s for s in scores if s.score >= 60]
         violation_count = state.get("compliance_violation_count", 0)
 
-        # Aggregate flags
+        # Aggregate flags (exclude low risk/favorable flags to avoid executive summary mismatch)
         all_flags: list[str] = []
         for s in scores:
-            all_flags.extend(s.flags)
+            if s.score >= 30:
+                all_flags.extend(s.flags)
         from collections import Counter
         top_flags = [f for f, _ in Counter(all_flags).most_common(5)]
 
@@ -59,8 +61,16 @@ class ReportWriter(BaseAgent):
         for c in compliance:
             if not c.compliant:
                 for v in c.violations:
-                    top_compliance.append(f"{v['framework']}: {v['description']}")
-        top_compliance = top_compliance[:5]
+                    top_compliance.append(f"{v.framework}: {v.description}")
+        
+        # De-duplicate identical compliance entries to avoid cluttering the summary
+        unique_compliance = []
+        seen = set()
+        for tc in top_compliance:
+            if tc not in seen:
+                seen.add(tc)
+                unique_compliance.append(tc)
+        top_compliance = unique_compliance[:5]
 
         executive_summary = self._call_llm(
             _SUMMARY_PROMPT.format(

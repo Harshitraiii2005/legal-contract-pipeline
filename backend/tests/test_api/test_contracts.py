@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -24,6 +24,13 @@ engine = create_engine(
     connect_args={"check_same_thread": False},
     poolclass=StaticPool,
 )
+
+@event.listens_for(engine, "connect")
+def connect(dbapi_connection, connection_record):
+    cursor = dbapi_connection.cursor()
+    cursor.execute("ATTACH DATABASE ':memory:' AS audit;")
+    cursor.close()
+
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
@@ -118,9 +125,9 @@ class TestAuth:
 
 class TestContracts:
     @patch("app.api.routes.contracts.parse_document", return_value="contract text here")
-    @patch("app.api.routes.contracts._upload_to_s3")
+    @patch("app.api.routes.contracts.local_storage")
     @patch("app.api.routes.contracts.run_review_pipeline")
-    def test_upload_pdf(self, mock_task, mock_s3, mock_parse, client, test_user):
+    def test_upload_pdf(self, mock_task, mock_storage, mock_parse, client, test_user):
         mock_task.delay = MagicMock()
         token = get_token(client)
         file_content = b"%PDF-1.4 fake content"
@@ -151,4 +158,4 @@ class TestContracts:
 
     def test_requires_auth(self, client):
         resp = client.get("/api/v1/contracts/")
-        assert resp.status_code == 403
+        assert resp.status_code == 401

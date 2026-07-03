@@ -51,7 +51,7 @@ def parse_docx(content: bytes) -> str:
         if not text:
             continue
         # Capitalise headings for easier downstream segmentation
-        if para.style.name.startswith("Heading"):
+        if para.style and para.style.name and para.style.name.startswith("Heading"):
             text = text.upper()
         paragraphs.append(text)
 

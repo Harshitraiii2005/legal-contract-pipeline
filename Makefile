@@ -1,10 +1,13 @@
+VENV_BIN = $(CURDIR)/.venv/bin
+
 .PHONY: help dev dev-backend dev-frontend dev-worker test test-backend test-frontend \
         lint migrate migrate-make k8s-local k8s-staging k8s-production \
-        mlflow-up mlflow-down evals build clean
+        mlflow-up mlflow-down evals build clean venv
 
 help:
 	@echo "Legal Contract Pipeline — make targets"
 	@echo ""
+	@echo "  make venv             Set up or update Python virtual environment"
 	@echo "  make dev              Run backend + frontend + worker locally (3 terminals via tmux-free fallback: sequential hint)"
 	@echo "  make dev-backend      Run FastAPI with reload"
 	@echo "  make dev-frontend     Run Vite dev server"
@@ -31,14 +34,19 @@ help:
 
 # ── Local dev ────────────────────────────────────────────────────────────────
 
+venv:
+	python3 -m venv .venv
+	.venv/bin/pip install --upgrade pip
+	.venv/bin/pip install -r backend/requirements.txt
+
 dev-backend:
-	cd backend && uvicorn main:app --reload --host 0.0.0.0 --port 8000
+	cd backend && $(VENV_BIN)/uvicorn main:app --reload --host 0.0.0.0 --port 8000
 
 dev-frontend:
 	cd frontend && npm run dev
 
 dev-worker:
-	cd backend && celery -A app.workers.celery_app worker -Q pipeline -c 2 -l info
+	cd backend && $(VENV_BIN)/celery -A app.workers.celery_app worker -Q pipeline -c 2 -l info
 
 dev:
 	@echo "Run these in separate terminals:"
@@ -51,22 +59,22 @@ dev:
 test: test-backend test-frontend
 
 test-backend:
-	cd backend && pytest tests/ -v --cov=app --cov-report=term
+	cd backend && $(VENV_BIN)/pytest tests/ -v --cov=app --cov-report=term
 
 test-frontend:
 	cd frontend && npm run test
 
 lint:
-	cd backend && ruff check .
+	cd backend && $(VENV_BIN)/ruff check .
 	cd frontend && npm run lint
 
 # ── Migrations ────────────────────────────────────────────────────────────────
 
 migrate:
-	cd backend && alembic upgrade head
+	cd backend && $(VENV_BIN)/alembic upgrade head
 
 migrate-make:
-	cd backend && alembic revision --autogenerate -m "$(m)"
+	cd backend && $(VENV_BIN)/alembic revision --autogenerate -m "$(m)"
 
 # ── Kubernetes ────────────────────────────────────────────────────────────────
 
@@ -88,7 +96,7 @@ mlflow-down:
 	docker compose -f mlflow/docker-compose.mlflow.yml down
 
 evals:
-	MLFLOW_TRACKING_URI=$${MLFLOW_TRACKING_URI:-http://localhost:5000} python evals/run_evals.py
+	MLFLOW_TRACKING_URI=$${MLFLOW_TRACKING_URI:-http://localhost:5000} $(VENV_BIN)/python evals/run_evals.py
 
 # ── Build ─────────────────────────────────────────────────────────────────────
 
@@ -102,6 +110,3 @@ clean:
 	find backend -type f -name "*.pyc" -delete
 	rm -rf frontend/node_modules frontend/dist
 	rm -rf backend/.pytest_cache backend/.ruff_cache backend/htmlcov backend/coverage.xml
-
-dev-worker:
-	cd backend && celery -A app.workers.celery_app worker -Q pipeline -c 2 -l info

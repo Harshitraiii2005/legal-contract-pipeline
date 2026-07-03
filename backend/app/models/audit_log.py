@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, String, Text, func
+from sqlalchemy import DateTime, String, Text, func, JSON
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -34,7 +34,7 @@ class AuditLog(Base):
     model_version: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
     # Structured payload (agent inputs/outputs, decision metadata)
-    payload: Mapped[dict] = mapped_column(JSONB, default=dict)
+    payload: Mapped[dict] = mapped_column(JSONB().with_variant(JSON, "sqlite"), default=dict)
 
     # Immutable timestamp
     occurred_at: Mapped[datetime] = mapped_column(

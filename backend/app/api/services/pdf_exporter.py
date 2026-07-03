@@ -175,7 +175,7 @@ def build_risk_pdf(report: FinalReport) -> bytes:
         for cr in violations:
             for v in cr.violations:
                 comp_rows.append(
-                    [str(cr.clause_id), v.get("framework", ""), v.get("article", ""), v.get("description", "")]
+                    [str(cr.clause_id), v.framework, v.article or "", v.description]
                 )
         comp_table = Table(comp_rows, colWidths=[1.5 * cm, 2.5 * cm, 2 * cm, 11 * cm])
         comp_table.setStyle(

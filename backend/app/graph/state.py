@@ -29,14 +29,15 @@ class ClauseRiskScore(BaseModel):
 
 class ComplianceViolation(BaseModel):
     framework: str
-    article: str = ""
+    article: str | None = ""
     description: str
+    confidence: float = Field(default=1.0, ge=0.0, le=1.0)
 
 
 class ComplianceResult(BaseModel):
     clause_id: int
     compliant: bool
-    violations: list[dict[str, Any]] = Field(default_factory=list)
+    violations: list[ComplianceViolation] = Field(default_factory=list)
     recommendations: list[str] = Field(default_factory=list)
 
 
@@ -52,6 +53,7 @@ class RedlineEdit(BaseModel):
     revised_text: str
     changes: list[dict[str, Any]] = Field(default_factory=list)
     attorney_note: str = ""
+    approved: bool | None = None
 
 
 # ── Final aggregated report ──────────────────────────────────────────────────
@@ -85,9 +87,9 @@ class ContractReviewState(BaseModel):
     """Immutable-ish typed state passed between all agents in the graph."""
 
     # Input
-    contract_id: str
+    contract_id: str = ""
     contract_name: str = ""
-    contract_text: str
+    contract_text: str = ""
 
     # Stage outputs (populated incrementally)
     clauses: list[ClauseExtract] = Field(default_factory=list)
@@ -112,16 +114,17 @@ class ContractReviewState(BaseModel):
     created_at: datetime = Field(default_factory=datetime.utcnow)
     error: str | None = None
 
+    def __getitem__(self, item: str) -> Any:
+        try:
+            return getattr(self, item)
+        except AttributeError as e:
+            raise KeyError(item) from e
+
+    def get(self, item: str, default: Any = None) -> Any:
+        return getattr(self, item, default)
+
     class Config:
         # Allow arbitrary types for LangGraph compatibility
         arbitrary_types_allowed = True
 
-    def __getitem__(self, key: str):
-        return getattr(self, key)
-
-    def __setitem__(self, key: str, value):
-        setattr(self, key, value)
-
-    def get(self, key: str, default=None):
-        return getattr(self, key, default)
 

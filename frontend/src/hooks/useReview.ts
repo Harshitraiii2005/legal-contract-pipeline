@@ -15,11 +15,30 @@ export function useReview(contractId?: string) {
   } = useReviewStore();
 
   useEffect(() => {
-    if (contractId) {
-      selectContract(contractId);
-      fetchAudit(contractId);
+    if (!contractId) return;
+
+    selectContract(contractId);
+    fetchAudit(contractId);
+
+    let intervalId: any = null;
+
+    const shouldPoll =
+      currentContract &&
+      (currentContract.status === "processing" || currentContract.status === "pending");
+
+    if (shouldPoll) {
+      intervalId = setInterval(() => {
+        selectContract(contractId);
+        fetchAudit(contractId);
+      }, 3000);
     }
-  }, [contractId]);
+
+    return () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+    };
+  }, [contractId, currentContract?.status]);
 
   const approve = (notes?: string) =>
     contractId ? submitApproval(contractId, true, notes) : Promise.resolve();

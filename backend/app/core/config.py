@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     DEBUG: bool = False
 
     # ── Database ──────────────────────────────────────────────────────────
-    DATABASE_URL: PostgresDsn = Field(...)
+    DATABASE_URL: str = Field(...)
     DB_POOL_SIZE: int = 10
     DB_MAX_OVERFLOW: int = 20
 

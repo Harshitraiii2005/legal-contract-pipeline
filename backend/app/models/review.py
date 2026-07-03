@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, func, JSON
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -20,10 +20,10 @@ class Review(Base):
     reviewer_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True)
 
     # Pipeline outputs (stored as JSONB for flexibility)
-    clauses: Mapped[list] = mapped_column(JSONB, default=list)
-    risk_scores: Mapped[list] = mapped_column(JSONB, default=list)
-    compliance_results: Mapped[list] = mapped_column(JSONB, default=list)
-    redline_edits: Mapped[list] = mapped_column(JSONB, default=list)
+    clauses: Mapped[list] = mapped_column(JSONB().with_variant(JSON, "sqlite"), default=list)
+    risk_scores: Mapped[list] = mapped_column(JSONB().with_variant(JSON, "sqlite"), default=list)
+    compliance_results: Mapped[list] = mapped_column(JSONB().with_variant(JSON, "sqlite"), default=list)
+    redline_edits: Mapped[list] = mapped_column(JSONB().with_variant(JSON, "sqlite"), default=list)
     executive_summary: Mapped[str] = mapped_column(Text, default="")
     overall_score: Mapped[int] = mapped_column(Integer, default=0)
 
