@@ -1,2 +1,12 @@
 PYTHONPATH=. celery -A app.workers.celery_app worker --loglevel=info -Q pipeline
 sudo redis-server /etc/redis/redis.conf
+
+
+cd backend
+go run main.go
+
+cd pipeline-worker
+npm run dev
+
+cd frontend
+npm run dev

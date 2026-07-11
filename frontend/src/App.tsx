@@ -1,4 +1,6 @@
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import LandingPage from "./pages/LandingPage";
+import ContactPage from "./pages/ContactPage";
 import Dashboard from "./pages/Dashboard";
 import Login from "./pages/Login";
 import ReviewPage from "./pages/ReviewPage";
@@ -15,9 +17,14 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
+        {/* Public pages */}
+        <Route path="/" element={<LandingPage />} />
+        <Route path="/contact" element={<ContactPage />} />
         <Route path="/login" element={<Login />} />
+
+        {/* Protected app pages */}
         <Route
-          path="/"
+          path="/app"
           element={
             <PrivateRoute>
               <Dashboard />
@@ -32,6 +39,7 @@ export default function App() {
             </PrivateRoute>
           }
         />
+
         {/* Catch-all */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

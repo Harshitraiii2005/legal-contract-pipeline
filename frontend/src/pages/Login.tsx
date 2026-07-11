@@ -5,6 +5,8 @@ import { authApi } from "../api/client";
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [fullName, setFullName] = useState("");
+  const [isRegister, setIsRegister] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
@@ -14,12 +16,17 @@ export default function Login() {
     setError("");
     setLoading(true);
     try {
+      if (isRegister) {
+        // First register
+        await authApi.register(email, password, fullName);
+      }
+      // Then login (either directly or after registration)
       const { data } = await authApi.login(email, password);
       localStorage.setItem("access_token", data.access_token);
       localStorage.setItem("refresh_token", data.refresh_token);
       navigate("/");
     } catch (err: any) {
-      setError(err.response?.data?.detail ?? "Login failed");
+      setError(err.response?.data?.detail ?? (isRegister ? "Registration failed" : "Login failed"));
     } finally {
       setLoading(false);
     }
@@ -48,7 +55,66 @@ export default function Login() {
         <h1 className="auth-card__title">LexAI Pipeline</h1>
         <p className="auth-card__subtitle">Enterprise AI-powered contract compliance & risk analytics</p>
 
+        {/* Auth Mode Toggle */}
+        <div className="auth-tabs" style={{ display: "flex", gap: "16px", marginBottom: "24px", justifyContent: "center" }}>
+          <button
+            type="button"
+            className={`auth-tab ${!isRegister ? "active" : ""}`}
+            style={{
+              background: "none",
+              border: "none",
+              color: !isRegister ? "var(--color-accent)" : "var(--color-text-muted)",
+              borderBottom: !isRegister ? "2px solid var(--color-accent)" : "none",
+              paddingBottom: "4px",
+              cursor: "pointer",
+              fontWeight: 600,
+              fontSize: "1rem"
+            }}
+            onClick={() => {
+              setIsRegister(false);
+              setError("");
+            }}
+          >
+            Sign In
+          </button>
+          <button
+            type="button"
+            className={`auth-tab ${isRegister ? "active" : ""}`}
+            style={{
+              background: "none",
+              border: "none",
+              color: isRegister ? "var(--color-accent)" : "var(--color-text-muted)",
+              borderBottom: isRegister ? "2px solid var(--color-accent)" : "none",
+              paddingBottom: "4px",
+              cursor: "pointer",
+              fontWeight: 600,
+              fontSize: "1rem"
+            }}
+            onClick={() => {
+              setIsRegister(true);
+              setError("");
+            }}
+          >
+            Register
+          </button>
+        </div>
+
         <form className="auth-form" onSubmit={handleSubmit}>
+          {isRegister && (
+            <div className="form-group">
+              <label htmlFor="fullName" className="form-label">Full Name</label>
+              <input
+                id="fullName"
+                type="text"
+                placeholder="e.g. John Doe"
+                className="form-input"
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                required
+              />
+            </div>
+          )}
+
           <div className="form-group">
             <label htmlFor="email" className="form-label">Corporate Email</label>
             <input
@@ -82,10 +148,10 @@ export default function Login() {
             {loading ? (
               <>
                 <span className="spinner spinner--sm" style={{ borderTopColor: "#fff" }} />
-                <span>Signing in…</span>
+                <span>{isRegister ? "Registering…" : "Signing in…"}</span>
               </>
             ) : (
-              "Sign In"
+              isRegister ? "Register" : "Sign In"
             )}
           </button>
         </form>

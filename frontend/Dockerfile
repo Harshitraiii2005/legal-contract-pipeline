@@ -7,11 +7,15 @@ RUN npm ci
 COPY . .
 RUN npm run build
 
-# ── Nginx serving ─────────────────────────────────────────────────────────────
-FROM nginx:1.27-alpine AS final
+# ── Express serving ───────────────────────────────────────────────────────────
+FROM node:20-alpine AS final
 
-COPY --from=builder /app/dist /usr/share/nginx/html
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+WORKDIR /app
+COPY package.json package-lock.json* ./
+RUN npm ci --only=production
+
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/server.js ./server.js
 
 EXPOSE 80
-CMD ["nginx", "-g", "daemon off;"]
+CMD ["npm", "start"]
