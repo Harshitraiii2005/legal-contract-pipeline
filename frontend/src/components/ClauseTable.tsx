@@ -119,11 +119,11 @@ export function ClauseTable({ scores, onSelectClause }: Props) {
 
 function ScoreBar({ value }: { value: number }) {
   const color =
-    value >= 80
+    value >= 70
       ? "var(--color-critical)"
-      : value >= 60
+      : value >= 40
       ? "var(--color-high)"
-      : value >= 30
+      : value >= 20
       ? "var(--color-medium)"
       : "var(--color-low)";
       

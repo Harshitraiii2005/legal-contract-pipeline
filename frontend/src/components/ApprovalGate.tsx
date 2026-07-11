@@ -38,11 +38,11 @@ export function ApprovalGate({
   };
 
   const riskColor =
-    overallScore >= 80
+    overallScore >= 70
       ? "var(--color-critical)"
-      : overallScore >= 60
+      : overallScore >= 40
       ? "var(--color-high)"
-      : overallScore >= 30
+      : overallScore >= 20
       ? "var(--color-medium)"
       : "var(--color-low)";
 

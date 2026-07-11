@@ -26,6 +26,7 @@ class Review(Base):
     redline_edits: Mapped[list] = mapped_column(JSONB().with_variant(JSON, "sqlite"), default=list)
     executive_summary: Mapped[str] = mapped_column(Text, default="")
     overall_score: Mapped[int] = mapped_column(Integer, default=0)
+    represented_party: Mapped[str] = mapped_column(String, default="Client")
 
     # HITL
     approved: Mapped[bool | None] = mapped_column(Boolean, nullable=True)

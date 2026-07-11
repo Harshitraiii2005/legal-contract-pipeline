@@ -65,10 +65,14 @@ class FinalReport(BaseModel):
     clause_count: int
     high_risk_count: int
     violation_count: int
+    compliance_violation_clauses: int = 0
+    compliance_violation_issues: int = 0
     executive_summary: str
     risk_scores: list[ClauseRiskScore]
     compliance_results: list[ComplianceResult]
     redline_edits: list[RedlineEdit]
+    represented_party: str = "Client"
+    extraction_integrity_warning: str | None = None
     generated_at: datetime = Field(default_factory=datetime.utcnow)
 
 
@@ -90,15 +94,19 @@ class ContractReviewState(BaseModel):
     contract_id: str = ""
     contract_name: str = ""
     contract_text: str = ""
+    represented_party: str = "Client"
 
     # Stage outputs (populated incrementally)
     clauses: list[ClauseExtract] = Field(default_factory=list)
     clause_count: int = 0
+    extraction_integrity_warning: str | None = None
 
     risk_scores: list[ClauseRiskScore] = Field(default_factory=list)
 
     compliance_results: list[ComplianceResult] = Field(default_factory=list)
     compliance_violation_count: int = 0
+    compliance_violation_clauses: int = 0
+    compliance_violation_issues: int = 0
 
     redline_edits: list[RedlineEdit] = Field(default_factory=list)
 

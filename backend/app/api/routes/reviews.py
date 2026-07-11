@@ -42,6 +42,7 @@ class ReviewOut(BaseModel):
     approved: bool | None
     reviewer_notes: str
     decided_at: datetime | None
+    represented_party: str = "Client"
 
     class Config:
         from_attributes = True

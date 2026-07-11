@@ -55,3 +55,7 @@ app.include_router(reviews.router, prefix="/api/v1")
 @app.get("/health", tags=["ops"])
 def health():
     return {"status": "ok", "env": settings.ENV}
+
+# Trigger reload for backend/.env updates
+
+

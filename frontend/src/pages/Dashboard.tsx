@@ -179,11 +179,11 @@ export default function Dashboard() {
 
 function RiskGauge({ score }: { score: number }) {
   const color =
-    score >= 80
+    score >= 70
       ? "var(--color-critical)"
-      : score >= 60
+      : score >= 40
       ? "var(--color-high)"
-      : score >= 30
+      : score >= 20
       ? "var(--color-medium)"
       : "var(--color-low)";
       

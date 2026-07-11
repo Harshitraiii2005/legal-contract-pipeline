@@ -94,6 +94,7 @@ def run_review_pipeline(
             redline_edits=[e.dict() for e in state.get("redline_edits", [])],
             executive_summary=report.executive_summary if report else "",
             overall_score=report.overall_score if report else 0,
+            represented_party=state.get("represented_party", "Client"),
         )
         db.add(review)
 

@@ -17,7 +17,7 @@ Frameworks to check: {frameworks}
 ## Strict Applicability Rules:
 - **HIPAA**: ONLY applies if the contract explicitly involves Protected Health Information (PHI), medical records, or healthcare-related activities. If the clause does not deal with PHI or healthcare-related activities, mark as compliant for HIPAA. Do NOT raise false positives on generic data storage or API services.
 - **SOX (Sarbanes-Oxley)**: ONLY applies to financial accounting, internal audit controls, corporate governance, executive certification of financial reports, or fraudulent financial reporting. Under no circumstances should general SLAs, uptime guarantees, technical support parameters, or API response times be flagged under SOX.
-- **PCI-DSS**: ONLY applies if payment card details, cardholder data, or credit card transactions are processed.
+- **PCI-DSS**: ONLY applies if payment card details, cardholder data, or credit card transactions are processed. We use strict evidence-gating: if the contract references standard cardholder data security measures or states general compliance, it must be treated as compliant. Do NOT flag the lack of specific version numbers (e.g., v4.0) or minor administrative details as violations.
 - **FCPA**: ONLY applies to anti-bribery, anti-corruption, dealings with government officials, and ethical conduct.
 - **GDPR / CCPA / UK GDPR**: ONLY apply if personal data (especially of EU/California/UK residents) is processed under the contract.
 
@@ -117,18 +117,33 @@ class ComplianceChecker(BaseAgent):
         self.log.info("compliance_active_frameworks", frameworks=active_frameworks)
         
         results = asyncio.run(self._check_all(clauses, active_frameworks))
-        violation_count = sum(1 for r in results if not r.compliant)
+        violation_count = sum(len(r.violations) for r in results)
+        compliance_violation_clauses = sum(1 for r in results if len(r.violations) > 0)
         self.log.info(
             "compliance_check_done",
             total=len(results),
             violations=violation_count,
         )
-        return {"compliance_results": results, "compliance_violation_count": violation_count}
+        return {
+            "compliance_results": results,
+            "compliance_violation_count": violation_count,
+            "compliance_violation_clauses": compliance_violation_clauses,
+            "compliance_violation_issues": violation_count,
+        }
 
     async def _check_all(self, clauses: list[ClauseExtract], frameworks: list[str]) -> list[ComplianceResult]:
-        # Only check high-risk clause types to avoid token waste
+        # Only check high-risk clause types to avoid token waste.
+        #
+        # FIX: this previously listed "data_processing", but clause_extractor.py's
+        # CLAUSE_TYPES taxonomy has never actually produced that value — the closest
+        # available type was "confidentiality" or "other". That meant any clause
+        # actually about data protection/security silently fell outside this filter
+        # and never got compliance-checked at all (via `_skip_clause` below) unless
+        # it happened to also get mistagged as "confidentiality". Now that
+        # clause_extractor.py's taxonomy includes "data_protection" explicitly, this
+        # set is updated to match it.
         relevant_types = {
-            "confidentiality", "data_processing", "intellectual_property",
+            "confidentiality", "data_protection", "intellectual_property",
             "payment", "indemnification",
         }
         

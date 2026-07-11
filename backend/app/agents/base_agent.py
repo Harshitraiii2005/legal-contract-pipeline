@@ -17,6 +17,21 @@ logger = get_logger(__name__)
 
 _client: Groq | None = None
 
+# FIX (stale-cache bug): every entry in the LLM response cache is keyed
+# partly on this version string. Bumping it invalidates all previously
+# cached completions. Without this, a fix to a prompt's *wording* changes the
+# cache key naturally (since the prompt text itself is part of the hash) —
+# but a fix to code that runs *around* the LLM call (e.g. calibrate_score,
+# a grounding check, a flag-cleaning regex) does NOT change the prompt text
+# at all, so the exact same cached completion keeps getting served forever
+# even after the surrounding bug is fixed. Several rounds of this project's
+# testing produced byte-identical "re-runs" of a known-bad report — that
+# was this cache, not the model, and simply re-generating never actually
+# re-ran anything. Bump CACHE_SCHEMA_VERSION whenever a fix could plausibly
+# change how a cached completion should be used, or wire this to a real
+# code/deploy version at build time.
+CACHE_SCHEMA_VERSION = "2"
+
 
 def get_groq_client() -> Groq:
     """Returns the Groq client."""
@@ -127,7 +142,10 @@ class BaseAgent(ABC):
         return (
             "You are a senior legal AI assistant specialised in contract risk analysis. "
             "Be precise, cite clause text verbatim when relevant, and return structured JSON "
-            "unless instructed otherwise. Never hallucinate citations."
+            "unless instructed otherwise. Never hallucinate citations, figures, or dollar "
+            "amounts that do not appear in the source text. Never include conversational "
+            "preambles (e.g. 'here is a summary'), meta-commentary about your own output, "
+            "or raw JSON/code fences in a response that is supposed to be plain text."
         )
 
     # ------------------------------------------------------------------ #
@@ -156,8 +174,13 @@ class BaseAgent(ABC):
         safe_max_tokens = max(100, tpm_limit - estimated_input - 300)
         final_max_tokens = min(max_tokens or self.max_tokens, safe_max_tokens)
 
-        # Calculate prompt hash for local caching
-        prompt_input = f"{self.model}:{sys_prompt}:{user_prompt}:{temperature}:{final_max_tokens}"
+        # Calculate prompt hash for local caching. CACHE_SCHEMA_VERSION is
+        # included so that fixes to code around the LLM call (not just the
+        # prompt text itself) can be forced to bypass stale cached results.
+        prompt_input = (
+            f"{CACHE_SCHEMA_VERSION}:{self.model}:{sys_prompt}:{user_prompt}:"
+            f"{temperature}:{final_max_tokens}"
+        )
         prompt_hash = hashlib.sha256(prompt_input.encode("utf-8")).hexdigest()
 
         # Check cache
@@ -187,21 +210,44 @@ class BaseAgent(ABC):
         _set_cached_response(prompt_hash, content)
         return content
 
-    def _call_llm_json(self, user_prompt: str, **kwargs) -> Any:
-        """Call LLM and parse the first valid JSON value from the response."""
+    def _call_llm_json(self, user_prompt: str, max_retries: int = 2, **kwargs) -> Any:
+        """Call LLM and parse the first valid JSON value from the response.
+
+        FIX: previously a JSON-decode failure raised immediately with no
+        retry at all (the @retry decorator on `_call_llm` only covers
+        network/API-level exceptions, not "the model didn't return valid
+        JSON"). A single malformed response would hard-fail the whole agent.
+        This now gives the model a bounded number of extra attempts,
+        explicitly telling it what went wrong, before giving up.
+        """
         import json
 
-        raw = self._call_llm(user_prompt, **kwargs)
+        prompt = user_prompt
+        last_error: Exception | None = None
 
-        # Use raw_decode to grab only the first valid JSON value,
-        # ignoring any trailing text, extra blocks, or markdown fences.
-        text = raw.strip()
-        for i, ch in enumerate(text):
-            if ch in ('[', '{'):
-                try:
-                    value, _ = json.JSONDecoder().raw_decode(text, i)
-                    return value
-                except json.JSONDecodeError:
-                    continue
+        for attempt in range(max_retries + 1):
+            raw = self._call_llm(prompt, **kwargs)
+            text = raw.strip()
 
-        raise ValueError(f"No valid JSON found in LLM response: {raw[:300]}")
+            for i, ch in enumerate(text):
+                if ch in ('[', '{'):
+                    try:
+                        value, _ = json.JSONDecoder().raw_decode(text, i)
+                        return value
+                    except json.JSONDecodeError:
+                        continue
+
+            last_error = ValueError(f"No valid JSON found in LLM response: {raw[:300]}")
+            self.log.warning(
+                "llm_json_parse_failed_retrying",
+                agent=self.agent_name,
+                attempt=attempt + 1,
+            )
+            prompt = (
+                user_prompt
+                + "\n\nCRITICAL: Your previous response did not contain valid, parseable "
+                "JSON. Return ONLY a single valid JSON object or array — no prose, no "
+                "markdown fences, no commentary before or after it."
+            )
+
+        raise last_error

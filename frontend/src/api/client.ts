@@ -114,6 +114,7 @@ export interface Review {
   approved: boolean | null;
   reviewer_notes: string;
   decided_at: string | null;
+  represented_party?: string;
 }
 
 export interface RiskScore {

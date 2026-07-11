@@ -44,6 +44,26 @@ def node_parallel_analysis(state: ContractReviewState, agents: dict) -> dict[str
         scored = scorer_future.result()
         compliant = compliance_future.result()
 
+    # Reconciliation step:
+    # If a clause has compliance violations, force a floor of 40 on its risk score.
+    from app.agents.risk_scorer import get_severity
+    
+    risk_scores = scored.get("risk_scores", [])
+    compliance_results = compliant.get("compliance_results", [])
+    comp_map = {r.clause_id: r for r in compliance_results}
+    
+    reconciled_scores = []
+    for s in risk_scores:
+        comp = comp_map.get(s.clause_id)
+        if comp and len(comp.violations) > 0:
+            if s.score is None or s.score < 40:
+                s.score = 40
+                s.severity = get_severity(40)
+                if "compliance violation floor applied" not in s.flags:
+                    s.flags.append("compliance violation floor applied")
+        reconciled_scores.append(s)
+    scored["risk_scores"] = reconciled_scores
+
     merged = {**state.dict(), **scored, **compliant}
     merged_state = ContractReviewState(**merged)
     redlined = agents["redliner"].run(merged_state)
