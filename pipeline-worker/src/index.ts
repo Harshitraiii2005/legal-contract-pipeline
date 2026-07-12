@@ -7,6 +7,13 @@ import { buildRedlinedDocx } from './services/docx-builder';
 import { buildRiskPdf } from './services/pdf-exporter';
 import * as local_storage from './services/local-storage';
 import { ContractReviewState } from './pipeline/state';
+import express from 'express';
+
+const app = express();
+app.get('/health', (_req, res) => res.status(200).send('worker alive'));
+
+const port = process.env.PORT || 3000;
+app.listen(port, () => console.log(`[worker] health check listening on ${port}`));
 
 export { LexAIPipelineSDK, SDKOptions } from './sdk';
 
