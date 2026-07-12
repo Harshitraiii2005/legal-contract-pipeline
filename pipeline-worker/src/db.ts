@@ -4,6 +4,7 @@ import crypto from 'crypto';
 
 export const pool = new Pool({
   connectionString: config.databaseUrl,
+  ssl: { rejectUnauthorized: false },
 });
 
 export async function updateContractStatus(
