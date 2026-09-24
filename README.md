@@ -122,6 +122,11 @@ docker run -d -p 5432:5432 -e POSTGRES_USER=legal -e POSTGRES_PASSWORD=legal -e 
 docker run -d -p 6379:6379 redis:7-alpine
 ```
 
+Create the schema (`backend-go` has no migration runner of its own; this needs to be run once against any fresh database, local or hosted):
+```bash
+psql "$DATABASE_URL" -f backend-go/schema.sql
+```
+
 #### A. Go API Gateway
 ```bash
 cd backend-go
