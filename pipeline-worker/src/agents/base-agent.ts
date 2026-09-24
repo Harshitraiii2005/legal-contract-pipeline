@@ -1,6 +1,7 @@
 import { createGroq } from '@ai-sdk/groq';
 import { generateText } from 'ai';
 import { config } from '../config';
+import { SHARED_SYSTEM_PROMPT } from '../prompts/shared';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
@@ -48,14 +49,7 @@ export abstract class BaseAgent {
   abstract execute(state: any): Promise<any>;
 
   protected systemPrompt(): string {
-    return (
-      "You are a senior legal AI assistant specialised in contract risk analysis. " +
-      "Be precise, cite clause text verbatim when relevant, and return structured JSON " +
-      "unless instructed otherwise. Never hallucinate citations, figures, or dollar " +
-      "amounts that do not appear in the source text. Never include conversational " +
-      "preambles (e.g. 'here is a summary'), meta-commentary about your own output, " +
-      "or raw JSON/code fences in a response that is supposed to be plain text."
-    );
+    return SHARED_SYSTEM_PROMPT;
   }
 
   protected async callLlm(

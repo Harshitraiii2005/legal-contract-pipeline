@@ -1,58 +1,8 @@
 import { BaseAgent } from './base-agent';
 import { ClauseExtract, ClauseRiskScore, ContractReviewState } from '../pipeline/state';
 import { vectorStoreService } from '../services/vector-store';
-
-const BATCH_SCORE_PROMPT = `\
-You are a senior contract risk analyst. Score the following batch of contract clauses for legal risk specifically from the perspective of our company ({represented_party}) (the company receiving or signing the agreement).
-
-For each clause in the batch, you must:
-1. Determine the "risk_perspective": Who does this clause benefit? (e.g. "benefits counterparty", "benefits our company ({represented_party})"). Explain how it impacts our company ({represented_party}).
-2. Determine "score": An integer between 0 and 100 representing the risk to our company ({represented_party}).
-   - 0-19 = LOW risk (clause is standard, mutual, or highly favorable to our company ({represented_party})).
-   - 20-39 = MEDIUM risk (clause is slightly one-sided or has minor unfavorable terms, but manageable for our company).
-   - 40-69 = HIGH risk (clause is heavily one-sided favoring the counterparty, introduces significant liability, or lacks standard protections for our company).
-   - 70-100 = CRITICAL risk (clause is extremely punitive to our company, exposes us to unlimited liability, or strips away essential legal rights of our company).
-3. Provide "reasoning": 2-4 sentences explaining the specific risk to our company ({represented_party}) citing the clause language.
-   IMPORTANT: Only cite numbers, dollar amounts, dates, or defined terms that literally
-   appear in the clause text below. Never invent, estimate, or infer a specific figure
-   that is not written in the clause. If the clause does not specify an amount, say so
-   explicitly (e.g. "the clause does not specify a dollar cap") rather than making one up.
-4. Provide "flags": A list of short, human-readable strings naming specific risk factors
-   (e.g. "unlimited liability", "perpetual IP assignment"). Do NOT output internal
-   process labels, enum values, or review-status strings (e.g. "high_risk",
-   "flagged_for_review") — flags must describe the *clause's* risk, not the pipeline's
-   internal state.
-
-## Calibration Anchors (Few-Shot Examples):
-Example 1: Liability cap favoring our company ({represented_party}) (LOW risk):
-- Clause: "Company's maximum liability for any claims arising out of this Agreement shall be limited to $5,000, while Client's liability is unlimited."
-  - risk_perspective: Favorable to our company ({represented_party}). It caps our company's liability at a very low amount ($5,000) while leaving the counterparty's (Client) liability uncapped.
-  - score: 10
-  - reasoning: This clause strongly protects our company by capping our maximum liability at a nominal amount ($5,000). The counterparty (Client) is left with uncapped liability, which minimizes risk to our company.
-  - flags: ["capped liability", "favorable liability cap"]
-
-Example 2: Liability cap unfavorable to our company ({represented_party}) (HIGH/CRITICAL risk):
-- Clause: "Company shall indemnify Client against all claims, and Company's total liability for any breach is capped at $10, while Client's liability is uncapped, and Client shall not be subject to any cap."
-  - risk_perspective: Highly unfavorable to our company ({represented_party}). It requires our company to indemnify the counterparty (Client) without limit, while capping our own recourse against them at a trivial $10.
-  - score: 85
-  - reasoning: This clause exposes our company to extreme risk. We must provide unlimited indemnification to the counterparty (Client), but our ability to recover any damages from them is capped at a negligible $10.
-  - flags: ["unlimited indemnification", "punitive liability cap", "one-sided liability"]
-
-## Similar historical clauses for reference:
-{rag_context}
-
-## Clauses to score:
-{clauses_text}
-
-Return a JSON object containing a list named "results", where each item corresponds to a clause and has:
-  - "clause_id": integer (must match the "id" of the clause provided below)
-  - "risk_perspective": brief description of who the clause benefits and why (e.g. "benefits counterparty", "benefits our company ({represented_party})")
-  - "score": integer 0-100
-  - "reasoning": 2-4 sentence explanation citing specific language and reasoning about risk to our company ({represented_party})
-  - "flags": list of short strings naming specific risk factors
-
-Return ONLY valid JSON.
-`.trim();
+import { BATCH_SCORE_PROMPT, REASONING_FALLBACK_PROMPT } from '../prompts/scoring';
+import { SEVERITY_THRESHOLDS } from '../constants';
 
 const MONEY_OR_NUMBER_PATTERN = /\$\s?[\d,]+(?:\.\d+)?|\b\d{2,}(?:,\d{3})*\b/g;
 
@@ -69,50 +19,18 @@ const INTERNAL_FLAG_DENYLIST = new Set([
 
 const INTERNAL_FLAG_PATTERN = /(flagged.for.review|score.mismatch|mitigation.score|internal.use|debug|todo)/i;
 
-const EVAL_FIXTURE_ANCHORS: Array<[string, number]> = [
-  ['fifteen (15) days', 65],
-  ['ninety (90) days', 60],
-  ['three (3) months', 35],
-  ['in no event shall either party be liable for any indirect', 30],
-  ['works made for hire', 70],
-  ['insolvent', 40],
-  ['for convenience upon five (5) days', 80],
-  ['prevailing party', 30],
-  ['london, england', 50],
-  ["withheld in client's sole discretion", 50],
-  ['twenty (20) years', 70],
-  ['indemnify client for any failure to meet this warranty', 75],
-  ['either party may terminate this agreement for any reason upon thirty', 20],
-  ['survive termination of this agreement for a period of five (5) years', 25],
-  ['either party may assign this agreement to an affiliate', 20],
-];
-
+// Principled, general calibration rules only. Each one documents the legal
+// reasoning it encodes; none of them key off eval-fixture phrases. Add a
+// rule here only if it generalizes to clauses these exact words never
+// appear in — that's what distinguishes it from the phrase-matching this
+// replaced (see IMPROVEMENTS.md for the removed phrase table and why).
 export function calibrateScore(text: string, score: number, clauseType: string = ''): number {
   const textLower = text.toLowerCase();
 
-  if (textLower.includes('client shall indemnify') && textLower.includes('without any limitation')) {
-    return 85;
-  }
-  if (textLower.includes('company shall indemnify') && textLower.includes('without limitation')) {
-    return 80;
-  }
-  if (textLower.includes('capped at $10')) {
-    return 85;
-  }
-  if (textLower.includes('five percent (5%)') && textLower.includes('fifteen (15) days')) {
-    return 65;
-  }
-  if (textLower.includes('grants client a perpetual') && textLower.includes('royalty-free license')) {
-    return 55;
-  }
-  if (
-    textLower.includes(
-      'prior to or during the term of this agreement shall be the sole and exclusive property of client'
-    )
-  ) {
-    return 85;
-  }
-
+  // Rule: an uncapped, non-mutual indemnification obligation is a floor-level
+  // HIGH risk regardless of what score the model assigned — an open-ended
+  // promise to cover "any and all claims" is a standard-form red flag that
+  // should never be scored as merely MEDIUM even if the model undersells it.
   const isIndem =
     clauseType === 'indemnification' ||
     textLower.includes('indemnify') ||
@@ -133,24 +51,18 @@ export function calibrateScore(text: string, score: number, clauseType: string =
       textLower.includes('sole remedy');
 
     if (!hasReciprocity && !hasCap) {
-      score = Math.max(score, 60);
+      score = Math.max(score, SEVERITY_THRESHOLDS.high);
     }
   }
 
-  for (const [anchorText, anchorScore] of EVAL_FIXTURE_ANCHORS) {
-    if (textLower.includes(anchorText)) {
-      return anchorScore;
-    }
-  }
-
-  return score;
+  return Math.max(0, Math.min(100, score));
 }
 
 export function getSeverity(score: number): 'low' | 'medium' | 'high' | 'critical' {
-  if (score <= 19) return 'low';
-  if (score <= 39) return 'medium';
-  if (score <= 69) return 'high';
-  return 'critical';
+  if (score >= SEVERITY_THRESHOLDS.critical) return 'critical';
+  if (score >= SEVERITY_THRESHOLDS.high) return 'high';
+  if (score >= SEVERITY_THRESHOLDS.medium) return 'medium';
+  return 'low';
 }
 
 function extractNumbers(text: string): Set<string> {
@@ -209,36 +121,45 @@ export class RiskScorer extends BaseAgent {
     }
 
     const resultsLists = await Promise.all(batches.map((b) => this.scoreBatch(b, representedParty)));
-    const flatResults: ClauseRiskScore[] = [];
-    for (const lst of resultsLists) {
-      flatResults.push(...lst);
-    }
-
     const idToScore = new Map<number, ClauseRiskScore>();
-    for (const s of flatResults) {
-      idToScore.set(s.clause_id, s);
-    }
-
-    const finalScores: ClauseRiskScore[] = [];
-    for (const c of clauses) {
-      const existing = idToScore.get(c.id);
-      if (existing) {
-        finalScores.push(existing);
-      } else {
-        console.error(`[missing_score_for_clause_fallback_applied] Clause ID: ${c.id}`);
-        finalScores.push({
-          clause_id: c.id,
-          score: 50, // default mid score if LLM missed it
-          severity: 'high',
-          reasoning:
-            'This clause could not be scored automatically. Manual review is required before this report is approved.',
-          flags: ['scoring failed — manual review required'],
-          rag_hits: [],
-        });
+    for (const lst of resultsLists) {
+      for (const s of lst) {
+        idToScore.set(s.clause_id, s);
       }
     }
 
-    return finalScores;
+    // Every clause id sent to the scorer must come back exactly once. Retry
+    // only the clauses the model dropped, rather than silently defaulting
+    // them — a re-request usually succeeds, and it keeps the "manual review
+    // required" fallback for genuine repeat failures only.
+    let missing = clauses.filter((c) => !idToScore.has(c.id));
+    if (missing.length > 0) {
+      console.warn(`[missing_scores_retrying] Clause IDs: ${missing.map((c) => c.id).join(', ')}`);
+      try {
+        const retryResults = await this.scoreBatch(missing, representedParty);
+        for (const s of retryResults) {
+          idToScore.set(s.clause_id, s);
+        }
+      } catch (e: any) {
+        console.warn(`[missing_scores_retry_failed] Error: ${e.message}`);
+      }
+      missing = clauses.filter((c) => !idToScore.has(c.id));
+    }
+
+    for (const c of missing) {
+      console.error(`[missing_score_for_clause_fallback_applied] Clause ID: ${c.id}`);
+      idToScore.set(c.id, {
+        clause_id: c.id,
+        score: 50, // default mid score if LLM missed it after retry
+        severity: 'high',
+        reasoning:
+          'This clause could not be scored automatically. Manual review is required before this report is approved.',
+        flags: ['scoring failed — manual review required'],
+        rag_hits: [],
+      });
+    }
+
+    return clauses.map((c) => idToScore.get(c.id)!);
   }
 
   private async scoreBatch(batch: ClauseExtract[], representedParty: string): Promise<ClauseRiskScore[]> {
@@ -361,20 +282,7 @@ export class RiskScorer extends BaseAgent {
     scoreVal: number,
     representedParty: string
   ): Promise<string> {
-    const prompt = `\
-You are a senior contract risk analyst. Provide a detailed, professional risk analysis reasoning for the following contract clause.
-We are analyzing this from the perspective of our company ({represented_party}).
-The clause has been assigned a risk score of {score_val}/100.
-
-Clause Type: {clause_type}
-Clause Text:
-{clause_text}
-
-Provide 2-4 sentences explaining the specific legal and financial risks to our company ({represented_party}) based on the clause wording.
-Only cite numbers, dollar amounts, or dates that literally appear in the clause text above. If none are present, say so rather than inventing one.
-Do NOT output any JSON, markdown headers, or intro comments. Write ONLY the plain-text reasoning sentences.
-`.trim()
-      .replace(/{represented_party}/g, representedParty)
+    const prompt = REASONING_FALLBACK_PROMPT.replace(/{represented_party}/g, representedParty)
       .replace('{score_val}', scoreVal.toString())
       .replace('{clause_type}', clauseType)
       .replace('{clause_text}', clauseText);
