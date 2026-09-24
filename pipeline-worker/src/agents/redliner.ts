@@ -1,31 +1,10 @@
 import { BaseAgent } from './base-agent';
 import { RiskScorer } from './risk-scorer';
 import { ClauseExtract, ClauseRiskScore, RedlineEdit, ContractReviewState } from '../pipeline/state';
+import { REDLINE_PROMPT } from '../prompts/redline';
+import { REDLINE_SCORE_THRESHOLD } from '../constants';
+import { diffToChanges } from '../utils/text-diff';
 
-const REDLINE_PROMPT = `\
-You are an expert contract attorney. The following clause has been flagged as
-high-risk. Propose a revised version that reduces risk while preserving the
-commercial intent of the clause.
-
-Risk Score: {score}/100
-Risk Flags: {flags}
-Compliance Issues: {compliance_issues}
-
-ORIGINAL CLAUSE:
-{original_text}
-
-Return a JSON object with:
-  - "revised_text": the full revised clause text
-  - "changes": list of objects, each with:
-      - "original": the exact phrase being removed/changed
-      - "replacement": the replacement phrase (empty string if deleting)
-      - "rationale": one-sentence explanation
-  - "attorney_note": brief note to the reviewing lawyer
-
-Return ONLY valid JSON.
-`.trim();
-
-const HIGH_RISK_THRESHOLD = 60;
 const MISMATCH_TOLERANCE_POINTS = 5;
 
 function noteImpliesRiskReduction(note: string): boolean {
@@ -62,7 +41,7 @@ export class Redliner extends BaseAgent {
 
     const highRisk = clauses.filter((c) => {
       const s = scoreMap.get(c.id);
-      return s && s.score !== undefined && s.score >= HIGH_RISK_THRESHOLD;
+      return s && s.score !== undefined && s.score >= REDLINE_SCORE_THRESHOLD;
     });
 
     const edits = await this.redlineAll(highRisk, scoreMap, complianceMap, representedParty);
@@ -99,14 +78,48 @@ export class Redliner extends BaseAgent {
       complianceIssues = issues.join('; ');
     }
 
-    const prompt = REDLINE_PROMPT.replace('{score}', String(score.score))
+    const prompt = REDLINE_PROMPT.replace(/{represented_party}/g, representedParty)
+      .replace('{clause_type}', clause.type)
+      .replace('{score}', String(score.score))
       .replace('{flags}', score.flags.join(', '))
       .replace('{compliance_issues}', complianceIssues || 'None')
       .replace('{original_text}', clause.text);
 
-    const result = await this.callLlmJson(prompt);
-    const revisedText = result.revised_text;
-    const attorneyNote = result.attorney_note || '';
+    let result = await this.callLlmJson(prompt);
+    let revisedText = result.revised_text;
+    let attorneyNote = result.attorney_note || '';
+    let changes: RedlineEdit['changes'] = result.changes || [];
+
+    // The model's `changes[].original` must be an exact substring of the
+    // source clause — attorneys review redlines by locating "original" in
+    // the source text, and a paraphrased or invented "original" makes the
+    // redline unusable. Retry once with the bad values called out, then
+    // fall back to a code-computed diff rather than ship an unverifiable
+    // change list.
+    let unverified = this.findUnverifiedChanges(changes, clause.text);
+    if (unverified.length > 0) {
+      console.warn(`[redline_change_not_verbatim] Clause ID: ${clause.id}, Unverified: ${unverified.length}`);
+      const retryPrompt =
+        prompt +
+        `\n\nCRITICAL: In your previous response, these "original" values were not found ` +
+        `verbatim (exact substring, same spelling/punctuation/case) in the ORIGINAL CLAUSE: ` +
+        `${JSON.stringify(unverified)}. Fix "changes" so every "original" is copied exactly ` +
+        `from the ORIGINAL CLAUSE text above.`;
+      try {
+        result = await this.callLlmJson(retryPrompt);
+        revisedText = result.revised_text || revisedText;
+        attorneyNote = result.attorney_note || attorneyNote;
+        changes = result.changes || [];
+        unverified = this.findUnverifiedChanges(changes, clause.text);
+      } catch (e: any) {
+        console.warn(`[redline_verification_retry_failed] Clause ID: ${clause.id}, Error: ${e.message}`);
+      }
+    }
+
+    if (unverified.length > 0) {
+      console.warn(`[redline_change_fallback_to_diff] Clause ID: ${clause.id}`);
+      changes = diffToChanges(clause.text, revisedText);
+    }
 
     // Re-score the revised text
     const mitigatedResult = await this.scorer.scoreSingleClauseText(
@@ -134,11 +147,22 @@ export class Redliner extends BaseAgent {
       clause_id: clause.id,
       original_text: clause.text,
       revised_text: revisedText,
-      changes: result.changes || [],
+      changes,
       attorney_note: attorneyNote,
       original_score: score.score,
       mitigated_score: mitigatedScore,
       mitigation_score_mismatch: mismatch,
     };
+  }
+
+  private findUnverifiedChanges(changes: RedlineEdit['changes'], sourceText: string): string[] {
+    const unverified: string[] = [];
+    for (const c of changes || []) {
+      const original = (c.original || '').trim();
+      if (original && !sourceText.includes(original)) {
+        unverified.push(original);
+      }
+    }
+    return unverified;
   }
 }
