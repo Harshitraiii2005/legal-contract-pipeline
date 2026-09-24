@@ -158,32 +158,34 @@ export default function ReviewPage() {
       {/* Score summary */}
       {review && (
         <div className={`score-summary ${getRiskClass(review.overall_score)}`}>
-          <div className="score-summary__score" style={{ borderColor: getRiskColor(review.overall_score), display: "flex", flexDirection: "column", height: "auto", minHeight: "130px", padding: "16px 12px" }}>
-            <span className="score-summary__number" style={{ color: getRiskColor(review.overall_score), lineHeight: "1" }}>
-              {review.overall_score}
-            </span>
-            <span className="score-summary__label" style={{ marginBottom: "8px" }}>Risk Rating</span>
-            <div className="score-legend" style={{ fontSize: "10px", textAlign: "left", lineHeight: "1.4", borderTop: "1px solid var(--color-border)", paddingTop: "8px", width: "100%" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "4px", color: "var(--color-text-secondary)" }}>
-                <span style={{ display: "inline-block", width: "6px", height: "6px", borderRadius: "50%", backgroundColor: "var(--color-critical)" }}></span>
-                70-100 Critical
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: "4px", color: "var(--color-text-secondary)" }}>
-                <span style={{ display: "inline-block", width: "6px", height: "6px", borderRadius: "50%", backgroundColor: "var(--color-high)" }}></span>
-                40-69 High
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: "4px", color: "var(--color-text-secondary)" }}>
-                <span style={{ display: "inline-block", width: "6px", height: "6px", borderRadius: "50%", backgroundColor: "var(--color-medium)" }}></span>
-                20-39 Medium
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: "4px", color: "var(--color-text-secondary)" }}>
-                <span style={{ display: "inline-block", width: "6px", height: "6px", borderRadius: "50%", backgroundColor: "var(--color-low)" }}></span>
-                0-19 Low
-              </div>
+          <div className="score-summary__left">
+            <div className="score-summary__score" style={{ borderColor: getRiskColor(review.overall_score) }}>
+              <span className="score-summary__number" style={{ color: getRiskColor(review.overall_score) }}>
+                {review.overall_score}
+              </span>
+              <span className="score-summary__label">Risk Rating</span>
+            </div>
+            <div className="score-legend">
+              <span className="score-legend__item">
+                <span className="score-legend__dot" style={{ background: "var(--color-critical)" }} />
+                70–100 Critical
+              </span>
+              <span className="score-legend__item">
+                <span className="score-legend__dot" style={{ background: "var(--color-high)" }} />
+                40–69 High
+              </span>
+              <span className="score-legend__item">
+                <span className="score-legend__dot" style={{ background: "var(--color-medium)" }} />
+                20–39 Medium
+              </span>
+              <span className="score-legend__item">
+                <span className="score-legend__dot" style={{ background: "var(--color-low)" }} />
+                0–19 Low
+              </span>
             </div>
           </div>
           <div className="score-summary__details">
-            <h4 className="score-summary__heading" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <h4 className="score-summary__heading">
               <span>Executive Risk Briefing</span>
               {review.represented_party && (
                 <span className="badge badge--info" style={{ fontSize: "11px", textTransform: "none", padding: "2px 8px" }}>
@@ -191,7 +193,7 @@ export default function ReviewPage() {
                 </span>
               )}
             </h4>
-            <p className="score-summary__summary" style={{ whiteSpace: "pre-wrap" }}>{review.executive_summary}</p>
+            <p className="score-summary__summary">{review.executive_summary}</p>
           </div>
         </div>
       )}
