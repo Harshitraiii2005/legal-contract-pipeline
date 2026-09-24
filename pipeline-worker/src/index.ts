@@ -148,6 +148,21 @@ async function startWorker() {
     console.error(`[worker] Redis error: ${err.message}`);
   });
 
+  // Prove the DB connection works (and log which host it's actually using,
+  // password redacted) before waiting on jobs — every prior failure here
+  // only surfaced once a job was already picked up and processing had
+  // started, which made "which of Redis vs DB vs the LLM is actually
+  // broken" needlessly hard to tell apart from the logs alone.
+  try {
+    const dbHost = new URL(config.databaseUrl).host;
+    console.log(`[worker] Testing database connection to: ${dbHost}`);
+    await pool.query('SELECT 1');
+    console.log('[worker] Database connection OK (lexai schema reachable)');
+  } catch (err: any) {
+    console.error(`[worker] Database connection test FAILED: ${err.message}`);
+    console.error('[worker] Jobs will be picked up but every one will fail until this is fixed.');
+  }
+
   // Main processing loop
   while (true) {
     try {

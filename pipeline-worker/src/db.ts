@@ -9,23 +9,29 @@ import crypto from 'crypto';
 // stays explicitly schema-qualified (see writeAuditEvent below) and is
 // unaffected by this.
 //
-// This used to be the `options: '-c search_path=...'` startup parameter,
-// which is set atomically during the connection handshake with no
-// ordering risk — but it caused every query to fail with "Connection
-// terminated unexpectedly" in production. The working theory: Render's
-// *internal* Postgres URL (recommended for service-to-service traffic,
-// unlike the external URL this was tested against beforehand) may route
-// through a connection pooler that doesn't support arbitrary startup
-// options and resets the connection rather than erroring cleanly. `SET
-// search_path` as a normal query on 'connect' is the more broadly
-// compatible approach. It's not actually racy despite appearances: pg's
-// Pool fires 'connect' synchronously and this handler's client.query()
-// call enqueues onto that client's single-connection FIFO query queue
-// before the pool can hand the client to any other waiting caller in the
-// same tick, so this always runs first.
+// NOTE: production is currently failing every query with "Connection
+// terminated unexpectedly", including with a plain `SET search_path`
+// query on 'connect' below (not just the startup-option variant this
+// replaced) — so search_path itself is NOT the cause; something about the
+// connection itself is failing before any query can run. Ruled out so
+// far: this exact config works fine against the database's External URL
+// from outside Render. Still unverified: whether DATABASE_URL on the
+// deployed service is actually correct, and whether `ssl:
+// { rejectUnauthorized: false }` (present before any of today's changes)
+// is compatible with Render's Internal Postgres URL specifically — only
+// External has been tested. See index.ts's startup connection test log
+// for whatever the real error turns out to be.
 export const pool = new Pool({
   connectionString: config.databaseUrl,
   ssl: { rejectUnauthorized: false },
+});
+
+pool.on('error', (err) => {
+  // Without this handler, an error on an *idle* pooled client (e.g. the
+  // server dropping a connection between queries) throws unhandled and
+  // crashes the whole process, rather than just failing whatever query
+  // was in flight at the time.
+  console.error('[db] Unexpected error on idle client:', err.message);
 });
 
 pool.on('connect', (client) => {
