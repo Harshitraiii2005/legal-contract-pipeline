@@ -66,7 +66,7 @@ export class ClauseExtractor extends BaseAgent {
     for (const chunk of chunks) {
       const prompt = EXTRACTION_PROMPT.replace('{types}', CLAUSE_TYPES.join(', ')).replace('{contract_text}', chunk);
       const raw = await this.callLlmObject(prompt, HeadingListSchema);
-      for (const item of raw) {
+      for (const item of raw.clauses) {
         if (item.heading) {
           rawItems.push({ heading: item.heading, type: item.type });
         }

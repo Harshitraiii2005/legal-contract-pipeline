@@ -31,12 +31,18 @@ export const CLAUSE_TYPES = [
 // supplied and to be an array including every key in properties"). Since
 // strict mode also guarantees the model actually populates every required
 // field, a server-side default is no longer needed for robustness either.
-export const HeadingListSchema = z.array(
-  z.object({
-    heading: z.string(),
-    type: z.enum(CLAUSE_TYPES),
-  })
-);
+//
+// Wrapped in an object (not a bare top-level array) because OpenAI's
+// structured outputs also requires the root schema to be `type: "object"`
+// — "schema must be a JSON Schema of 'type: object', got 'type: array'".
+export const HeadingListSchema = z.object({
+  clauses: z.array(
+    z.object({
+      heading: z.string(),
+      type: z.enum(CLAUSE_TYPES),
+    })
+  ),
+});
 
 export const PerspectiveSchema = z.object({
   represented_party: z.enum(['Client', 'Provider']),
@@ -65,7 +71,7 @@ CRITICAL RULES — a violation of any of these is a serious defect:
 4. If you are unsure whether something is a "real" clause, include it rather
    than omit it — omission is the worse error.
 
-For each heading return a JSON array where every element has:
+Return a JSON object with a "clauses" array, where every element has:
   - "heading": the clause heading exactly as it appears in the source, verbatim
   - "type": one of {types}
 
