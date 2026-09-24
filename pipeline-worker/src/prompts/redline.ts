@@ -5,19 +5,20 @@
 
 import { z } from 'zod';
 
+// No .default() — see the comment on HeadingListSchema in extraction.ts for
+// why (OpenAI structured-output strict mode requires every property in
+// "required", which a defaulted field is excluded from).
 export const RedlineResultSchema = z.object({
   revised_text: z.string(),
-  changes: z
-    .array(
-      z.object({
-        type: z.string().default('edit'),
-        original: z.string().default(''),
-        replacement: z.string().default(''),
-        rationale: z.string().default(''),
-      })
-    )
-    .default([]),
-  attorney_note: z.string().default(''),
+  changes: z.array(
+    z.object({
+      type: z.string(),
+      original: z.string(),
+      replacement: z.string(),
+      rationale: z.string(),
+    })
+  ),
+  attorney_note: z.string(),
 });
 
 export const REDLINE_PROMPT = `\

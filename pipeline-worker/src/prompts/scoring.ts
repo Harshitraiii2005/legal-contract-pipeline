@@ -7,12 +7,15 @@
 
 import { z } from 'zod';
 
+// No .default() — see the comment on HeadingListSchema in extraction.ts for
+// why (OpenAI structured-output strict mode requires every property in
+// "required", which a defaulted field is excluded from).
 export const ScoreItemSchema = z.object({
   clause_id: z.coerce.number().int(),
   risk_perspective: z.string(),
   score: z.coerce.number().int().min(0).max(100),
   reasoning: z.string(),
-  flags: z.array(z.string()).default([]),
+  flags: z.array(z.string()),
 });
 
 export const BatchScoreSchema = z.object({

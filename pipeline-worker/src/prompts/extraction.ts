@@ -23,10 +23,18 @@ export const CLAUSE_TYPES = [
   'other',
 ] as const;
 
+// No .default() here or in any schema below: OpenAI's structured-output
+// strict mode requires every property to appear in the object's "required"
+// array, with no concept of "optional with a default" — a defaulted zod
+// field gets treated as absent from "required" in the generated JSON
+// schema, which OpenAI rejects outright ("'required' is required to be
+// supplied and to be an array including every key in properties"). Since
+// strict mode also guarantees the model actually populates every required
+// field, a server-side default is no longer needed for robustness either.
 export const HeadingListSchema = z.array(
   z.object({
     heading: z.string(),
-    type: z.enum(CLAUSE_TYPES).default('other'),
+    type: z.enum(CLAUSE_TYPES),
   })
 );
 

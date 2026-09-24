@@ -1,17 +1,18 @@
 import { z } from 'zod';
 
+// No .default() — see the comment on HeadingListSchema in extraction.ts for
+// why (OpenAI structured-output strict mode requires every property in
+// "required", which a defaulted field is excluded from).
 export const ComplianceResultSchema = z.object({
-  compliant: z.boolean().default(true),
-  violations: z
-    .array(
-      z.object({
-        framework: z.string().default('Unknown'),
-        article: z.coerce.string().default(''),
-        description: z.string().default('Compliance violation detected.'),
-      })
-    )
-    .default([]),
-  recommendations: z.array(z.string()).default([]),
+  compliant: z.boolean(),
+  violations: z.array(
+    z.object({
+      framework: z.string(),
+      article: z.coerce.string(),
+      description: z.string(),
+    })
+  ),
+  recommendations: z.array(z.string()),
 });
 
 export const COMPLIANCE_PROMPT = `\
