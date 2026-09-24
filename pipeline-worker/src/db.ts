@@ -2,9 +2,21 @@ import { Pool } from 'pg';
 import { config } from './config';
 import crypto from 'crypto';
 
+// This app's tables live in the "lexai" schema, not "public" — see
+// backend-go/schema.sql for why (DATABASE_URL may point at a Postgres
+// instance shared with an unrelated app). `options` is sent as part of
+// Postgres's connection startup handshake itself (equivalent to libpq's
+// PGOPTIONS), so search_path is guaranteed to be set before any query can
+// run on the connection — unlike a `pool.on('connect', ...)` handler, which
+// doesn't block the pool from handing that connection to a caller before
+// the handler's own query finishes. "contracts"/"reviews" below resolve
+// into "lexai" without being schema-qualified; audit.audit_logs stays
+// explicitly schema-qualified (see writeAuditEvent below) and is
+// unaffected by this.
 export const pool = new Pool({
   connectionString: config.databaseUrl,
   ssl: { rejectUnauthorized: false },
+  options: '-c search_path=lexai,public',
 });
 
 export async function updateContractStatus(
