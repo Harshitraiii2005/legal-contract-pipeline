@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/lexai/backend-go/config"
 )
@@ -18,6 +19,21 @@ func Connect(cfg *config.Config) error {
 		return fmt.Errorf("unable to parse database URL: %w", err)
 	}
 	poolConfig.MaxConns = int32(cfg.DBPoolSize)
+
+	// This app's tables (users, contracts, reviews) live in the "lexai"
+	// schema, not "public" — DATABASE_URL may point at a Postgres instance
+	// shared with an unrelated app (e.g. a free-tier database also used by
+	// another project), which can already have its own "public.users" etc.
+	// Setting search_path here means every unqualified table reference in
+	// this codebase (SELECT/INSERT/UPDATE against "users", "contracts",
+	// "reviews") transparently resolves inside "lexai" without a single SQL
+	// string elsewhere needing to be schema-qualified. audit.audit_logs
+	// stays explicitly schema-qualified in code (see handlers/reviews.go)
+	// and is unaffected by this.
+	poolConfig.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
+		_, err := conn.Exec(ctx, "SET search_path TO lexai, public")
+		return err
+	}
 
 	pool, err := pgxpool.ConnectConfig(context.Background(), poolConfig)
 	if err != nil {

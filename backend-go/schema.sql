@@ -3,6 +3,18 @@
 -- Render's Postgres "Connect" > psql shell). Safe to re-run against a
 -- database this was already applied to — every statement is idempotent.
 --
+-- All of this app's tables live in the "lexai" schema, not "public".
+-- DATABASE_URL may point at a Postgres instance shared with a completely
+-- unrelated app (e.g. a single free-tier database reused across projects),
+-- which can already have its own "public.users" or other same-named tables
+-- — putting everything in "lexai" avoids any collision, no matter what
+-- else lives in the same database. db/db.go sets `search_path` to
+-- `lexai, public` on every connection, so none of the Go code's SQL needs
+-- to schema-qualify "users"/"contracts"/"reviews" — it resolves into
+-- "lexai" automatically. audit.audit_logs is the one exception: it's
+-- already schema-qualified explicitly in handlers/reviews.go, so it gets
+-- its own top-level "audit" schema instead.
+--
 -- backend-go has no migration runner of its own — it was built assuming a
 -- database already migrated by the legacy Python backend's Alembic
 -- migrations (backend/alembic/versions/). This file is those two
@@ -20,9 +32,10 @@
 --     target of reviews.reviewer_id / audit_logs.user_id, both nullable
 --     and never populated either.
 
+CREATE SCHEMA IF NOT EXISTS lexai;
 CREATE SCHEMA IF NOT EXISTS audit;
 
-CREATE TABLE IF NOT EXISTS users (
+CREATE TABLE IF NOT EXISTS lexai.users (
     id              TEXT PRIMARY KEY,
     email           VARCHAR(255) NOT NULL UNIQUE,
     hashed_password TEXT NOT NULL,
@@ -32,11 +45,11 @@ CREATE TABLE IF NOT EXISTS users (
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-CREATE INDEX IF NOT EXISTS ix_users_email ON users (email);
+CREATE INDEX IF NOT EXISTS ix_users_email ON lexai.users (email);
 
-CREATE TABLE IF NOT EXISTS contracts (
+CREATE TABLE IF NOT EXISTS lexai.contracts (
     id                  TEXT PRIMARY KEY,
-    owner_id            TEXT REFERENCES users (id),
+    owner_id            TEXT REFERENCES lexai.users (id),
     name                VARCHAR(500) NOT NULL,
     original_filename   VARCHAR(500) NOT NULL DEFAULT '',
     file_type           VARCHAR(20) NOT NULL DEFAULT 'pdf',
@@ -53,12 +66,12 @@ CREATE TABLE IF NOT EXISTS contracts (
 -- Relaxes owner_id to nullable for anyone who already applied an earlier
 -- version of this script with the NOT NULL constraint. A no-op if the
 -- column is already nullable.
-ALTER TABLE contracts ALTER COLUMN owner_id DROP NOT NULL;
+ALTER TABLE lexai.contracts ALTER COLUMN owner_id DROP NOT NULL;
 
-CREATE TABLE IF NOT EXISTS reviews (
+CREATE TABLE IF NOT EXISTS lexai.reviews (
     id                  TEXT PRIMARY KEY,
-    contract_id         TEXT NOT NULL UNIQUE REFERENCES contracts (id),
-    reviewer_id         TEXT REFERENCES users (id),
+    contract_id         TEXT NOT NULL UNIQUE REFERENCES lexai.contracts (id),
+    reviewer_id         TEXT REFERENCES lexai.users (id),
     clauses             JSONB NOT NULL DEFAULT '[]',
     risk_scores         JSONB NOT NULL DEFAULT '[]',
     compliance_results  JSONB NOT NULL DEFAULT '[]',
