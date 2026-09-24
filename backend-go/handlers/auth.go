@@ -2,6 +2,8 @@ package handlers
 
 import (
 	"context"
+	"regexp"
+	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -21,18 +23,45 @@ func NewAuthHandler(cfg *config.Config) *AuthHandler {
 	return &AuthHandler{cfg: cfg}
 }
 
+var emailPattern = regexp.MustCompile(`^[^\s@]+@[^\s@]+\.[^\s@]+$`)
+
+const minPasswordLength = 8
+
+// normalizeEmail lowercases and trims an email so "Foo@Bar.com" and
+// "foo@bar.com " are treated as the same account both at registration and
+// at login — without this, a user could accidentally register a
+// case-variant duplicate, or fail to log in because of how their browser
+// or a password manager capitalized the address.
+func normalizeEmail(email string) string {
+	return strings.ToLower(strings.TrimSpace(email))
+}
+
 // Register creates a new user.
 func (h *AuthHandler) Register(c *fiber.Ctx) error {
 	var req models.RegisterRequest
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"detail": "Invalid request body"})
 	}
+
+	req.Email = normalizeEmail(req.Email)
+	req.FullName = strings.TrimSpace(req.FullName)
+
 	if req.Email == "" || req.Password == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"detail": "Email and password required"})
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"detail": "Email and password are required"})
 	}
-	if req.Role == "" {
-		req.Role = "reviewer"
+	if !emailPattern.MatchString(req.Email) {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"detail": "Enter a valid email address"})
 	}
+	if len(req.Password) < minPasswordLength {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"detail": "Password must be at least 8 characters"})
+	}
+
+	// The role a self-registering user ends up with is never taken from the
+	// request body — a client could otherwise POST {"role": "admin"} and
+	// grant itself elevated privileges. Every self-registration is a
+	// "reviewer"; role changes are an administrative action, not something
+	// exposed on this endpoint.
+	const role = "reviewer"
 
 	// Check if email already exists
 	var exists bool
@@ -57,7 +86,7 @@ func (h *AuthHandler) Register(c *fiber.Ctx) error {
 	_, err = db.Pool.Exec(context.Background(),
 		`INSERT INTO users (id, email, hashed_password, full_name, role, is_active, created_at, updated_at)
 		 VALUES ($1, $2, $3, $4, $5, true, $6, $7)`,
-		userID, req.Email, string(hashed), req.FullName, req.Role, now, now)
+		userID, req.Email, string(hashed), req.FullName, role, now, now)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"detail": "Failed to create user"})
 	}
@@ -66,7 +95,7 @@ func (h *AuthHandler) Register(c *fiber.Ctx) error {
 		ID:        userID,
 		Email:     req.Email,
 		FullName:  req.FullName,
-		Role:      req.Role,
+		Role:      role,
 		CreatedAt: now,
 	})
 }
@@ -77,6 +106,7 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"detail": "Invalid request body"})
 	}
+	req.Email = normalizeEmail(req.Email)
 
 	var user models.User
 	err := db.Pool.QueryRow(context.Background(),

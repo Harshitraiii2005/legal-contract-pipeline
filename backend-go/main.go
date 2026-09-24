@@ -5,10 +5,12 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/compress"
 	"github.com/gofiber/fiber/v2/middleware/cors"
+	"github.com/gofiber/fiber/v2/middleware/limiter"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/joho/godotenv"
@@ -77,7 +79,18 @@ func main() {
 	// ── Public Routes ─────────────────────────────────────────────────
 	api := app.Group("/api/v1")
 
-	auth := api.Group("/auth")
+	// Rate limit the credential-guessing surface: 10 attempts per minute per
+	// IP, shared across register/login/refresh since all three let an
+	// attacker test credentials or tokens.
+	authLimiter := limiter.New(limiter.Config{
+		Max:        10,
+		Expiration: 1 * time.Minute,
+		LimitReached: func(c *fiber.Ctx) error {
+			return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{"detail": "Too many attempts. Please try again in a minute."})
+		},
+	})
+
+	auth := api.Group("/auth", authLimiter)
 	auth.Post("/register", authHandler.Register)
 	auth.Post("/login", authHandler.Login)
 	auth.Post("/refresh", authHandler.Refresh)
