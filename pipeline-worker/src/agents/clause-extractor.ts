@@ -1,5 +1,6 @@
 import { BaseAgent } from './base-agent';
 import { ClauseExtract, ContractReviewState } from '../pipeline/state';
+import { EXTRACTION_PROMPT, PERSPECTIVE_PROMPT } from '../prompts/extraction';
 
 export const CLAUSE_TYPES = [
   'indemnification',
@@ -18,57 +19,32 @@ export const CLAUSE_TYPES = [
   'other',
 ];
 
-const EXTRACTION_PROMPT = `\
-You are a legal clause segmentation engine.
-
-Given the following contract text, extract every distinct legal clause.
-
-CRITICAL RULES — a violation of any of these is a serious defect:
-1. Every numbered/lettered clause heading present in the text MUST appear exactly
-   once in your output. Do not omit any clause, even if it seems purely
-   definitional, administrative, or low-risk (e.g. Definitions, Notices,
-   Entire Agreement, platform/service descriptions).
-2. Do not merge two distinct headings into one clause, and do not split a
-   single heading into two clauses unless the source text itself contains
-   two independently numbered provisions under one heading.
-3. Do not invent, duplicate, or renumber clauses. Preserve the original
-   heading text verbatim.
-4. If you are unsure whether something is a "real" clause, include it rather
-   than omit it — omission is the worse error.
-
-For each clause return a JSON array where every element has:
-  - "id": sequential integer starting at 1, in document order
-  - "type": one of {types}
-  - "heading": the clause heading exactly as it appears (or best guess)
-  - "text": the verbatim clause text
-  - "page_hint": approximate position as a fraction 0.0-1.0 of total document
-
-Return ONLY valid JSON — no markdown, no explanation.
-
-CONTRACT TEXT:
----
-{contract_text}
----
-`;
-
-const PERSPECTIVE_PROMPT = `\
-Analyze the following contract preamble and identify which party represents the "Client" (the customer, buyer, licensee, or service recipient) and which party represents the "Provider" (the vendor, supplier, licensor, or service provider).
-
-We want to determine which party's interests our company represents. By default, for vendor agreements, we represent the Client's perspective.
-Return a JSON object with:
-  - "represented_party": "Client" or "Provider"
-  - "explanation": a brief 1-sentence explanation.
-
-Return ONLY valid JSON.
-
-CONTRACT PREAMBLE:
----
-{preamble}
----
-`;
-
-const HEADING_PATTERN = /(?:(?:Section|ARTICLE|CLAUSE)\s+(\d+))|(?:^|\n)\s*(\d+)\.\s+[A-Z]/i;
 const HEADING_PATTERN_GLOBAL = /(?:(?:Section|ARTICLE|CLAUSE)\s+(\d+))|(?:^|\n)\s*(\d+)\.\s+[A-Z]/gi;
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// Locates a model-reported heading inside the actual source text, so clause
+// text can be sliced from the source instead of re-typed by the model.
+// Tries an exact match first (headings are asked for verbatim), then falls
+// back to a whitespace-tolerant match for minor formatting drift (extra
+// spaces, a stray newline). searchFrom keeps matches monotonic so a
+// duplicated heading string earlier in the document isn't matched twice.
+function findHeadingPosition(contractText: string, heading: string, searchFrom: number): number {
+  const trimmed = (heading || '').trim();
+  if (!trimmed) return -1;
+
+  const exactIdx = contractText.indexOf(trimmed, searchFrom);
+  if (exactIdx !== -1) return exactIdx;
+
+  const fuzzyPattern = escapeRegExp(trimmed).replace(/\s+/g, '\\s+');
+  const remainder = contractText.slice(searchFrom);
+  const match = remainder.match(new RegExp(fuzzyPattern));
+  if (match && match.index !== undefined) return searchFrom + match.index;
+
+  return -1;
+}
 
 export class ClauseExtractor extends BaseAgent {
   readonly agentName = 'clause_extractor';
@@ -99,51 +75,83 @@ export class ClauseExtractor extends BaseAgent {
 
     const expectedHeadingCount = this.countExpectedHeadings(contractText);
     const chunks = this.preSegment(contractText);
-    const allClauses: ClauseExtract[] = [];
-    const seenHeadings: Record<string, number> = {};
-    let nextId = 1;
 
+    // The model returns headings + types only; clause text is sliced from
+    // contractText below so it is always exactly what the source says (the
+    // model can no longer drop or reword text while "re-typing" a clause).
+    type HeadingItem = { heading: string; type: string };
+    const rawItems: HeadingItem[] = [];
     for (const chunk of chunks) {
       const prompt = EXTRACTION_PROMPT.replace('{types}', CLAUSE_TYPES.join(', ')).replace('{contract_text}', chunk);
       const raw: any[] = await this.callLlmJson(prompt);
-
       for (const item of raw) {
-        const headingNorm = (item.heading || '').trim().toLowerCase();
-
-        if (headingNorm && seenHeadings[headingNorm] !== undefined) {
-          console.warn(
-            `[duplicate_clause_heading_detected] Heading: ${item.heading}, First seen ID: ${seenHeadings[headingNorm]}`
-          );
+        if (item?.heading) {
+          rawItems.push({ heading: String(item.heading), type: item.type || 'other' });
         }
-
-        const clause: ClauseExtract = {
-          id: nextId,
-          type: item.type || 'other',
-          heading: item.heading || '',
-          text: item.text,
-          page_hint: item.page_hint || 0.0,
-        };
-
-        allClauses.push(clause);
-        if (headingNorm) {
-          seenHeadings[headingNorm] = nextId;
-        }
-        nextId++;
       }
     }
 
+    // Resolve each heading to a position in the source text, in order, so
+    // slices stay monotonic even if a heading string repeats elsewhere.
+    const seenHeadings: Record<string, number> = {};
+    const located: Array<HeadingItem & { index: number }> = [];
+    const unlocatable: string[] = [];
+    let cursor = 0;
+
+    for (const item of rawItems) {
+      const headingNorm = item.heading.trim().toLowerCase();
+      if (headingNorm && seenHeadings[headingNorm] !== undefined) {
+        console.warn(`[duplicate_clause_heading_detected] Heading: ${item.heading}`);
+      }
+
+      const index = findHeadingPosition(contractText, item.heading, cursor);
+      if (index === -1) {
+        console.error(`[clause_heading_not_found_in_source] Heading: ${item.heading}`);
+        unlocatable.push(item.heading);
+        continue;
+      }
+
+      located.push({ ...item, index });
+      if (headingNorm) seenHeadings[headingNorm] = index;
+      cursor = index + item.heading.length;
+    }
+
+    // Defensive: keep strictly increasing positions in case a fuzzy match
+    // landed before an earlier one (shouldn't happen given monotonic
+    // cursor, but slicing assumes sorted order).
+    located.sort((a, b) => a.index - b.index);
+
+    const allClauses: ClauseExtract[] = located.map((item, i) => {
+      const end = i + 1 < located.length ? located[i + 1].index : contractText.length;
+      return {
+        id: i + 1,
+        type: item.type,
+        heading: item.heading,
+        text: contractText.slice(item.index, end).trim(),
+        page_hint: contractText.length > 0 ? item.index / contractText.length : 0,
+      };
+    });
+
     const extractionGap = expectedHeadingCount - allClauses.length;
     let integrityFlag: string | null = null;
-    if (expectedHeadingCount > 0 && extractionGap > 0) {
-      integrityFlag =
-        `Detected ${expectedHeadingCount} numbered headings in the source ` +
-        `document but only extracted ${allClauses.length} clauses. ` +
-        `${extractionGap} clause(s) may have been dropped or merged during ` +
-        `extraction. This report should not be approved without manual ` +
-        `verification against the source document.`;
+    if (extractionGap > 0 || unlocatable.length > 0) {
+      const parts: string[] = [];
+      if (expectedHeadingCount > 0 && extractionGap > 0) {
+        parts.push(
+          `Detected ${expectedHeadingCount} numbered headings in the source document but only extracted ` +
+            `${allClauses.length} clauses (${extractionGap} may have been dropped or merged).`
+        );
+      }
+      if (unlocatable.length > 0) {
+        parts.push(
+          `${unlocatable.length} heading(s) reported by the model could not be located verbatim in the ` +
+            `source and were dropped: ${unlocatable.join('; ')}.`
+        );
+      }
+      integrityFlag = parts.join(' ') + ' This report should not be approved without manual verification against the source document.';
 
       console.error(
-        `[clause_extraction_integrity_check_failed] Expected: ${expectedHeadingCount}, Extracted: ${allClauses.length}, Gap: ${extractionGap}`
+        `[clause_extraction_integrity_check_failed] Expected: ${expectedHeadingCount}, Extracted: ${allClauses.length}, Gap: ${extractionGap}, Unlocatable: ${unlocatable.length}`
       );
     }
 
