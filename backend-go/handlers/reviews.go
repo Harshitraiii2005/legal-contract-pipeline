@@ -21,18 +21,21 @@ func NewReviewHandler(cfg *config.Config) *ReviewHandler {
 	return &ReviewHandler{cfg: cfg}
 }
 
-// GetReview returns the review details for a contract.
+// GetReview returns the review details for a contract, scoped to the
+// calling session (via a join back to contracts.owner_id — reviews itself
+// has no owner_id of its own).
 func (h *ReviewHandler) GetReview(c *fiber.Ctx) error {
+	sessionID := c.Locals("session_id").(string)
 	contractID := c.Params("contract_id")
 
 	var review models.Review
 	err := db.Pool.QueryRow(context.Background(),
-		`SELECT id, contract_id, overall_score, executive_summary,
-		        clauses, risk_scores, compliance_results, redline_edits,
-		        approved, reviewer_notes, decided_at, represented_party
-		 FROM reviews
-		 WHERE contract_id = $1`,
-		contractID).Scan(
+		`SELECT r.id, r.contract_id, r.overall_score, r.executive_summary,
+		        r.clauses, r.risk_scores, r.compliance_results, r.redline_edits,
+		        r.approved, r.reviewer_notes, r.decided_at, r.represented_party
+		 FROM reviews r JOIN contracts c ON c.id = r.contract_id
+		 WHERE r.contract_id = $1 AND c.owner_id = $2`,
+		contractID, sessionID).Scan(
 		&review.ID, &review.ContractID, &review.OverallScore, &review.ExecutiveSummary,
 		&review.Clauses, &review.RiskScores, &review.ComplianceResults, &review.RedlineEdits,
 		&review.Approved, &review.ReviewerNotes, &review.DecidedAt, &review.RepresentedParty,
@@ -67,6 +70,7 @@ func (h *ReviewHandler) GetReview(c *fiber.Ctx) error {
 
 // SubmitApproval handles approve/reject decision.
 func (h *ReviewHandler) SubmitApproval(c *fiber.Ctx) error {
+	sessionID := c.Locals("session_id").(string)
 	contractID := c.Params("contract_id")
 
 	var req models.ApprovalRequest
@@ -74,13 +78,13 @@ func (h *ReviewHandler) SubmitApproval(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"detail": "Invalid request body"})
 	}
 
-	// Verify contract exists and is awaiting approval
+	// Verify contract exists, belongs to this session, and is awaiting approval
 	var contractStatus, reviewID string
 	err := db.Pool.QueryRow(context.Background(),
 		`SELECT c.status, r.id FROM contracts c
 		 LEFT JOIN reviews r ON r.contract_id = c.id
-		 WHERE c.id = $1`,
-		contractID).Scan(&contractStatus, &reviewID)
+		 WHERE c.id = $1 AND c.owner_id = $2`,
+		contractID, sessionID).Scan(&contractStatus, &reviewID)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"detail": "Contract not found"})
 	}
@@ -114,20 +118,22 @@ func (h *ReviewHandler) SubmitApproval(c *fiber.Ctx) error {
 	}
 
 	// Audit event
-	writeAuditEvent(contractID, "approval_submitted", nil, &reviewID, nil,
+	writeAuditEvent(contractID, "approval_submitted", &sessionID, &reviewID, nil,
 		map[string]interface{}{"approved": req.Approved, "notes": req.Notes})
 
 	return c.JSON(fiber.Map{"contract_id": contractID, "status": newStatus})
 }
 
-// GetAuditTrail returns the audit log for a contract.
+// GetAuditTrail returns the audit log for a contract, scoped to the
+// calling session.
 func (h *ReviewHandler) GetAuditTrail(c *fiber.Ctx) error {
+	sessionID := c.Locals("session_id").(string)
 	contractID := c.Params("contract_id")
 
 	var exists bool
 	err := db.Pool.QueryRow(context.Background(),
-		`SELECT EXISTS(SELECT 1 FROM contracts WHERE id = $1)`,
-		contractID).Scan(&exists)
+		`SELECT EXISTS(SELECT 1 FROM contracts WHERE id = $1 AND owner_id = $2)`,
+		contractID, sessionID).Scan(&exists)
 	if err != nil || !exists {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"detail": "Contract not found"})
 	}

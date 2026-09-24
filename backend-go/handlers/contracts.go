@@ -30,13 +30,10 @@ func NewContractHandler(cfg *config.Config, storage *services.Storage, queue *se
 	return &ContractHandler{cfg: cfg, storage: storage, queue: queue}
 }
 
-// No login means no per-caller identity — this is a fixed placeholder
-// carried through to the pipeline job payload and audit log, where a
-// non-empty string is structurally expected downstream.
-const noAuthUserID = "public"
-
 // Upload handles contract file upload, text extraction, and pipeline enqueue.
 func (h *ContractHandler) Upload(c *fiber.Ctx) error {
+	sessionID := c.Locals("session_id").(string)
+
 	file, err := c.FormFile("file")
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"detail": "No file provided"})
@@ -79,22 +76,22 @@ func (h *ContractHandler) Upload(c *fiber.Ctx) error {
 
 	now := time.Now().UTC()
 	_, err = db.Pool.Exec(context.Background(),
-		`INSERT INTO contracts (id, name, original_filename, file_type, storage_key, raw_text, clause_count, overall_risk_score, status, thread_id, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, 0, 0, 'pending', '', $7, $8)`,
-		contractID, filename, filename, ext, storageKey, rawText, now, now)
+		`INSERT INTO contracts (id, owner_id, name, original_filename, file_type, storage_key, raw_text, clause_count, overall_risk_score, status, thread_id, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, 0, 0, 'pending', '', $8, $9)`,
+		contractID, sessionID, filename, filename, ext, storageKey, rawText, now, now)
 	if err != nil {
 		log.Printf("[contracts] DB insert error: %v", err)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"detail": "Failed to create contract"})
 	}
 
-	writeAuditEvent(contractID, "contract_uploaded", nil, nil, nil,
+	writeAuditEvent(contractID, "contract_uploaded", &sessionID, nil, nil,
 		map[string]interface{}{"filename": filename, "size_bytes": len(content)})
 
 	job := services.PipelineJob{
 		ContractID:   contractID,
 		ContractText: rawText,
 		ContractName: filename,
-		UserID:       noAuthUserID,
+		UserID:       sessionID,
 	}
 	if err := h.queue.Enqueue(context.Background(), job); err != nil {
 		log.Printf("[contracts] Queue error: %v", err)
@@ -106,8 +103,9 @@ func (h *ContractHandler) Upload(c *fiber.Ctx) error {
 	})
 }
 
-// List returns all contracts, newest first.
+// List returns the calling session's contracts, newest first.
 func (h *ContractHandler) List(c *fiber.Ctx) error {
+	sessionID := c.Locals("session_id").(string)
 	skip := c.QueryInt("skip", 0)
 	limit := c.QueryInt("limit", 20)
 	if limit > 100 {
@@ -116,8 +114,8 @@ func (h *ContractHandler) List(c *fiber.Ctx) error {
 
 	rows, err := db.Pool.Query(context.Background(),
 		`SELECT id, name, status, overall_risk_score, clause_count, thread_id
-		 FROM contracts ORDER BY created_at DESC OFFSET $1 LIMIT $2`,
-		skip, limit)
+		 FROM contracts WHERE owner_id = $1 ORDER BY created_at DESC OFFSET $2 LIMIT $3`,
+		sessionID, skip, limit)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"detail": "Database error"})
 	}
@@ -134,15 +132,16 @@ func (h *ContractHandler) List(c *fiber.Ctx) error {
 	return c.JSON(contracts)
 }
 
-// Get returns a single contract.
+// Get returns a single contract, scoped to the calling session.
 func (h *ContractHandler) Get(c *fiber.Ctx) error {
+	sessionID := c.Locals("session_id").(string)
 	contractID := c.Params("id")
 
 	var co models.ContractOut
 	err := db.Pool.QueryRow(context.Background(),
 		`SELECT id, name, status, overall_risk_score, clause_count, thread_id
-		 FROM contracts WHERE id = $1`,
-		contractID).Scan(&co.ID, &co.Name, &co.Status, &co.OverallRiskScore, &co.ClauseCount, &co.ThreadID)
+		 FROM contracts WHERE id = $1 AND owner_id = $2`,
+		contractID, sessionID).Scan(&co.ID, &co.Name, &co.Status, &co.OverallRiskScore, &co.ClauseCount, &co.ThreadID)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"detail": "Contract not found"})
 	}
@@ -151,14 +150,15 @@ func (h *ContractHandler) Get(c *fiber.Ctx) error {
 
 // DownloadRedline streams the redlined DOCX file.
 func (h *ContractHandler) DownloadRedline(c *fiber.Ctx) error {
+	sessionID := c.Locals("session_id").(string)
 	contractID := c.Params("id")
 
 	var docxKey, contractName string
 	err := db.Pool.QueryRow(context.Background(),
 		`SELECT r.redlined_docx_key, c.name FROM reviews r
 		 JOIN contracts c ON c.id = r.contract_id
-		 WHERE r.contract_id = $1`,
-		contractID).Scan(&docxKey, &contractName)
+		 WHERE r.contract_id = $1 AND c.owner_id = $2`,
+		contractID, sessionID).Scan(&docxKey, &contractName)
 	if err != nil || docxKey == "" {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"detail": "Redlined DOCX not yet generated"})
 	}
@@ -177,14 +177,15 @@ func (h *ContractHandler) DownloadRedline(c *fiber.Ctx) error {
 
 // DownloadReport streams the risk report PDF.
 func (h *ContractHandler) DownloadReport(c *fiber.Ctx) error {
+	sessionID := c.Locals("session_id").(string)
 	contractID := c.Params("id")
 
 	var pdfKey, contractName string
 	err := db.Pool.QueryRow(context.Background(),
 		`SELECT r.risk_pdf_key, c.name FROM reviews r
 		 JOIN contracts c ON c.id = r.contract_id
-		 WHERE r.contract_id = $1`,
-		contractID).Scan(&pdfKey, &contractName)
+		 WHERE r.contract_id = $1 AND c.owner_id = $2`,
+		contractID, sessionID).Scan(&pdfKey, &contractName)
 	if err != nil || pdfKey == "" {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"detail": "Risk report PDF not yet generated"})
 	}

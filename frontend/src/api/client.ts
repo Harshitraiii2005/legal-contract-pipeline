@@ -2,13 +2,31 @@ import axios from "axios";
 
 const BASE_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000/api/v1";
 
-// No auth: no token to attach, no 401-refresh flow. Every request here is
-// anonymous, and the backend treats contracts/reviews as shared rather than
-// scoped to a caller.
+const SESSION_KEY = "lexai_session_id";
+
+// No login, no password — but not fully public either. Each browser gets a
+// silent, anonymous session id on first use, persisted in localStorage, so
+// this visitor's contracts stay private from everyone else's without any
+// form to fill in. The backend (middleware/session.go) scopes every
+// contract/review to whichever session id created it.
+function getSessionId(): string {
+  let id = localStorage.getItem(SESSION_KEY);
+  if (!id) {
+    id = crypto.randomUUID();
+    localStorage.setItem(SESSION_KEY, id);
+  }
+  return id;
+}
+
 export const apiClient = axios.create({
   baseURL: BASE_URL,
   timeout: 60_000,
   headers: { "Content-Type": "application/json" },
+});
+
+apiClient.interceptors.request.use((config) => {
+  config.headers["X-Session-Id"] = getSessionId();
+  return config;
 });
 
 // ── Typed API helpers ─────────────────────────────────────────────────────────

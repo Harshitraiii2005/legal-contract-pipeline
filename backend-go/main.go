@@ -16,6 +16,7 @@ import (
 	"github.com/lexai/backend-go/config"
 	"github.com/lexai/backend-go/db"
 	"github.com/lexai/backend-go/handlers"
+	"github.com/lexai/backend-go/middleware"
 	"github.com/lexai/backend-go/services"
 )
 
@@ -60,7 +61,7 @@ func main() {
 		AllowOrigins:     joinOrigins(cfg.CORSOrigins),
 		AllowCredentials: true,
 		AllowMethods:     "GET,POST,PUT,DELETE,PATCH,OPTIONS",
-		AllowHeaders:     "Origin,Content-Type,Accept,Authorization",
+		AllowHeaders:     "Origin,Content-Type,Accept,Authorization," + middleware.SessionHeader,
 	}))
 
 	// ── Health ────────────────────────────────────────────────────────
@@ -73,10 +74,12 @@ func main() {
 	reviewHandler := handlers.NewReviewHandler(cfg)
 
 	// ── Routes ────────────────────────────────────────────────────────
-	// No auth: every route below is open to any caller. There is no login,
-	// no per-caller identity, and nothing scoped to "the current user" —
-	// contracts and reviews are shared across everyone who can reach this API.
-	api := app.Group("/api/v1")
+	// No login — but not fully open either. Every request carries an
+	// anonymous per-visitor session id (generated client-side, sent as
+	// X-Session-Id), and contracts/reviews are scoped to whichever session
+	// created them. There's no form, no password, nothing to remember; a
+	// visitor just can't see another visitor's contracts.
+	api := app.Group("/api/v1", middleware.SessionMiddleware())
 
 	// Contracts
 	contracts := api.Group("/contracts")

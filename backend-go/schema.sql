@@ -24,13 +24,12 @@
 --     (models/models.go, handlers/contracts.go), but the Alembic migration
 --     named that column s3_key. Uses storage_key so the schema matches
 --     what the Go code actually queries.
---   - The app has no login (auth was removed entirely — contracts and
---     reviews are shared, not scoped to a caller), so contracts.owner_id
---     is never populated. It's kept as a nullable column rather than
---     dropped outright, in case per-user ownership is reintroduced later.
---     The `users` table likewise stays only as the (currently empty)
---     target of reviews.reviewer_id / audit_logs.user_id, both nullable
---     and never populated either.
+--   - There's no login, but contracts/reviews are still per-visitor
+--     private: contracts.owner_id holds an opaque, anonymous session id
+--     generated client-side (see middleware/session.go), not a real
+--     users.id — so it's a plain TEXT column with no foreign key. The
+--     `users` table stays only as the (currently empty, never populated)
+--     target of reviews.reviewer_id / audit_logs.user_id, both nullable.
 
 CREATE SCHEMA IF NOT EXISTS lexai;
 CREATE SCHEMA IF NOT EXISTS audit;
@@ -49,7 +48,7 @@ CREATE INDEX IF NOT EXISTS ix_users_email ON lexai.users (email);
 
 CREATE TABLE IF NOT EXISTS lexai.contracts (
     id                  TEXT PRIMARY KEY,
-    owner_id            TEXT REFERENCES lexai.users (id),
+    owner_id            TEXT,
     name                VARCHAR(500) NOT NULL,
     original_filename   VARCHAR(500) NOT NULL DEFAULT '',
     file_type           VARCHAR(20) NOT NULL DEFAULT 'pdf',
@@ -67,6 +66,13 @@ CREATE TABLE IF NOT EXISTS lexai.contracts (
 -- version of this script with the NOT NULL constraint. A no-op if the
 -- column is already nullable.
 ALTER TABLE lexai.contracts ALTER COLUMN owner_id DROP NOT NULL;
+
+-- Drops the foreign key to lexai.users for anyone who already applied an
+-- earlier version of this script — owner_id now holds an anonymous
+-- session id, not a users.id, so a FK to users would reject every insert.
+ALTER TABLE lexai.contracts DROP CONSTRAINT IF EXISTS contracts_owner_id_fkey;
+
+CREATE INDEX IF NOT EXISTS ix_contracts_owner_id ON lexai.contracts (owner_id);
 
 CREATE TABLE IF NOT EXISTS lexai.reviews (
     id                  TEXT PRIMARY KEY,
