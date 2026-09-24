@@ -21,9 +21,9 @@ type Config struct {
 	// Redis
 	RedisURL string
 
-	// Groq LLM
-	GroqAPIKey string
-	GroqModel  string
+	// OpenAI LLM
+	OpenAIAPIKey string
+	OpenAIModel  string
 
 	// Pinecone
 	PineconeAPIKey string
@@ -67,8 +67,8 @@ func Load() *Config {
 
 		RedisURL: getEnv("REDIS_URL", "redis://localhost:6379/0"),
 
-		GroqAPIKey: getEnv("GROQ_API_KEY", ""),
-		GroqModel:  getEnv("GROQ_MODEL", "llama-3.3-70b-versatile"),
+		OpenAIAPIKey: getEnv("OPENAI_API_KEY", ""),
+		OpenAIModel:  getEnv("OPENAI_MODEL", "gpt-4o"),
 
 		PineconeAPIKey: getEnv("PINECONE_API_KEY", ""),
 		PineconeEnv:    getEnv("PINECONE_ENV", "us-east-1-aws"),

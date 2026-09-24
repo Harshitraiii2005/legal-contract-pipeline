@@ -1,19 +1,25 @@
-import { createGroq } from '@ai-sdk/groq';
+import { createOpenAI } from '@ai-sdk/openai';
 import { generateText, generateObject } from 'ai';
 import type { ZodTypeAny, z } from 'zod';
 import { config } from '../config';
 import { SHARED_SYSTEM_PROMPT } from '../prompts/shared';
 import { hashPrompt, getCachedResponse, setCachedResponse } from '../services/llm-cache';
 
+// gpt-4o's context window. Used only as a backstop so a request can't ask
+// for more output than fits alongside its input — OpenAI's rate limits are
+// account-tier-based, not a fixed per-model number like Groq's, so there's
+// no equivalent fixed budget to size against.
+const CONTEXT_WINDOW_TOKENS = 128_000;
+
 export abstract class BaseAgent {
   abstract readonly agentName: string;
   protected model: string;
   protected maxTokens: number = 4096;
-  protected groqProvider: ReturnType<typeof createGroq>;
+  protected llmProvider: ReturnType<typeof createOpenAI>;
 
   constructor() {
-    this.model = config.groqModel;
-    this.groqProvider = createGroq({ apiKey: config.groqApiKey });
+    this.model = config.openaiModel;
+    this.llmProvider = createOpenAI({ apiKey: config.openaiApiKey });
   }
 
   abstract execute(state: any): Promise<any>;
@@ -23,12 +29,11 @@ export abstract class BaseAgent {
   }
 
   private safeMaxTokens(sysPrompt: string, userPrompt: string, maxTokens?: number): number {
-    // Scale maxTokens to stay under Groq's tokens-per-minute limit for the
-    // configured model, since a request whose max output would blow the
-    // budget gets rejected outright rather than truncated.
-    const estimatedInput = Math.floor((sysPrompt.length + userPrompt.length) / 4);
-    const tpmLimit = this.model.includes('8b') ? 6000 : 12000;
-    const safeMaxTokens = Math.max(100, tpmLimit - estimatedInput - 300);
+    // Keep requested output within what's left of the context window after
+    // the input, so a large contract can't silently produce a request that
+    // gets rejected for exceeding the model's context limit.
+    const estimatedInput = Math.ceil((sysPrompt.length + userPrompt.length) / 4);
+    const safeMaxTokens = Math.max(256, CONTEXT_WINDOW_TOKENS - estimatedInput - 1000);
     return Math.min(maxTokens || this.maxTokens, safeMaxTokens);
   }
 
@@ -48,12 +53,12 @@ export abstract class BaseAgent {
       return cached;
     }
 
-    // Call Groq API with retries via Vercel AI SDK
+    // Call OpenAI with retries via the Vercel AI SDK
     let lastError: any;
     for (let attempt = 1; attempt <= 5; attempt++) {
       try {
         const response = await generateText({
-          model: this.groqProvider(this.model),
+          model: this.llmProvider(this.model),
           system: sysPrompt,
           prompt: userPrompt,
           temperature,
@@ -79,9 +84,9 @@ export abstract class BaseAgent {
   // result matched the shape callers expected — malformed or
   // partially-shaped responses only surfaced as a downstream crash or, worse,
   // silently wrong data. generateObject asks the model for output
-  // constrained to `schema` (via Groq's native JSON mode) and validates it
-  // with zod before returning; on a validation failure it's retried with the
-  // validation error appended to the prompt.
+  // constrained to `schema` (via OpenAI's native structured-output mode)
+  // and validates it with zod before returning; on a validation failure
+  // it's retried with the validation error appended to the prompt.
   protected async callLlmObject<T extends ZodTypeAny>(
     userPrompt: string,
     schema: T,
@@ -105,7 +110,7 @@ export abstract class BaseAgent {
 
       try {
         const { object } = await generateObject({
-          model: this.groqProvider(this.model),
+          model: this.llmProvider(this.model),
           system: sysPrompt,
           prompt,
           schema,

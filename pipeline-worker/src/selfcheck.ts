@@ -1,7 +1,7 @@
 // Runnable self-check for the deterministic (non-LLM) logic touched by the
 // defect fixes. No test framework: plain assert, run with `npm test`. Not a
 // substitute for the LLM evals in evals/ — those need a working
-// GROQ_API_KEY (see IMPROVEMENTS.md) — but this catches regressions in the
+// OPENAI_API_KEY (see IMPROVEMENTS.md) — but this catches regressions in the
 // parts that don't need one: severity bands, the one remaining calibration
 // rule, redline verification/diffing, heading location, and compliance
 // gating.

@@ -4,7 +4,7 @@
 // replaced by this worker — see IMPROVEMENTS.md for why this harness
 // exists instead of extending that one.
 //
-// Needs a working GROQ_API_KEY in .env. Run with: npm run eval
+// Needs a working OPENAI_API_KEY in .env. Run with: npm run eval
 // (from pipeline-worker/). Writes JSON results to evals/results/.
 
 import fs from 'fs';

@@ -51,7 +51,7 @@ graph TD
 
     subgraph LLM Provider [Cognitive Layer]
         VC[Vercel AI SDK]
-        GQ[Groq Cloud / Llama 3]
+        GQ[OpenAI / GPT-4o]
         WK -->|Orchestrates Agents| VC
         VC -->|Executes Queries| GQ
     end
@@ -92,7 +92,7 @@ graph TD
 | :--- | :--- | :--- |
 | **API Gateway** | Go, Fiber, pgx, JWT | Ingress controller, security boundary, user auth, metadata storage |
 | **Pipeline Worker** | Node.js, TypeScript, BullMQ | Background async consumer for contract processing |
-| **Orchestrator** | Vercel AI SDK, Groq, Pinecone | Multi-agent state machine (Extractor, Scorer, Compliance, Redliner) |
+| **Orchestrator** | Vercel AI SDK, OpenAI, Pinecone | Multi-agent state machine (Extractor, Scorer, Compliance, Redliner) |
 | **Frontend** | React SPA, Vite, Express | Beautiful dark-themed dashboard; served via node Express |
 | **Databases** | PostgreSQL, Redis | User data, audit ledger, and worker message queue |
 | **Integrations** | Model Context Protocol (MCP) | Exposes legal analysis tools to Cursor, Claude, and local scripts |
@@ -107,7 +107,7 @@ Create a `.env` file at the root:
 cp .env.example .env
 ```
 Fill in the credentials:
-* `GROQ_API_KEY`: API Key for Llama-3 model generation.
+* `OPENAI_API_KEY`: API key for GPT-4o agent generation.
 * `POSTGRES_DB_URL`: Connection string for PostgreSQL database.
 * `REDIS_URL`: Redis server URL for queue caching.
 * `PINECONE_API_KEY`: Pinecone API credentials.
@@ -177,7 +177,7 @@ Add this to your `claude_desktop_config.json`:
       "command": "node",
       "args": ["/home/dell/legal-contract-pipeline/pipeline-worker/dist/mcp-server.js"],
       "env": {
-        "GROQ_API_KEY": "your-api-key"
+        "OPENAI_API_KEY": "your-api-key"
       }
     }
   }

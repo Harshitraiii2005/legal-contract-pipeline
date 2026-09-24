@@ -3,8 +3,8 @@ import { ContractReviewState } from './pipeline/state';
 import { config } from './config';
 
 export interface SDKOptions {
-  groqApiKey?: string;
-  groqModel?: string;
+  openaiApiKey?: string;
+  openaiModel?: string;
 }
 
 export class LexAIPipelineSDK {
@@ -12,11 +12,11 @@ export class LexAIPipelineSDK {
 
   constructor(options?: SDKOptions) {
     // Override configurations if provided via SDK constructor
-    if (options?.groqApiKey) {
-      config.groqApiKey = options.groqApiKey;
+    if (options?.openaiApiKey) {
+      config.openaiApiKey = options.openaiApiKey;
     }
-    if (options?.groqModel) {
-      config.groqModel = options.groqModel;
+    if (options?.openaiModel) {
+      config.openaiModel = options.openaiModel;
     }
     this.orchestrator = new Orchestrator();
   }
