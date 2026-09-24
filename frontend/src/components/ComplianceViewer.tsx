@@ -47,7 +47,7 @@ export function ComplianceViewer({ results, edits }: Props) {
           </h3>
           <p style={{ color: "var(--color-text-muted)", fontSize: "0.875rem", marginTop: "4px" }}>
             {isCompliant
-              ? "All assessed high-risk clauses align with checked regulatory frameworks."
+              ? "All assessed high risk clauses align with checked regulatory frameworks."
               : `Found ${violations.length} clause(s) with ${results.reduce((acc, r) => acc + (r.violations?.length || 0), 0)} compliance issue(s).`}
           </p>
         </div>

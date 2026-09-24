@@ -38,7 +38,7 @@ export function DiffViewer({ edits, activeClauseId }: Props) {
         {edit ? (
           <>
             <div className="diff-toolbar">
-              <h3 className="diff-toolbar__title">Clause #{edit.clause_id} In-depth Analysis</h3>
+              <h3 className="diff-toolbar__title">Clause #{edit.clause_id} Detailed Analysis</h3>
               <div className="diff-toggle-group">
                 <button
                   className={`diff-toggle-btn ${viewMode === "split" ? "diff-toggle-btn--active" : ""}`}

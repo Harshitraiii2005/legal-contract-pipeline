@@ -38,7 +38,7 @@ export default function LandingPage() {
         <div className="hero__content">
           <span className="hero__eyebrow">
             <span className="hero__eyebrow-dot" />
-            AI-Powered Legal Intelligence
+            AI Powered Legal Intelligence
           </span>
           <h1 className="hero__title">
             Transform Contract Review
@@ -47,8 +47,8 @@ export default function LandingPage() {
           </h1>
           <p className="hero__subtitle">
             Analyze, score, and redline legal contracts in minutes — not days.
-            Our multi-agent AI pipeline identifies risks, checks compliance, and
-            generates attorney-ready redlines with full audit trails.
+            Our multi agent AI pipeline identifies risks, checks compliance, and
+            drafts redlines ready for attorney review, backed by a full audit trail.
           </p>
           <div className="hero__actions">
             <Link to="/app" className="hero__cta hero__cta--primary">
@@ -129,8 +129,8 @@ export default function LandingPage() {
               </div>
               <h3 className="vision__card-title">Hours → Minutes</h3>
               <p className="vision__card-text">
-                What takes a junior associate 4–6 hours, LexAI completes in under 3 minutes
-                with higher consistency and zero fatigue-related errors.
+                What takes a junior associate 4 to 6 hours, LexAI completes in under 3 minutes
+                with higher consistency and none of the errors that creep in from fatigue.
               </p>
             </div>
             <div className="vision__card">
@@ -139,7 +139,7 @@ export default function LandingPage() {
                   <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
                 </svg>
               </div>
-              <h3 className="vision__card-title">Human-in-the-Loop</h3>
+              <h3 className="vision__card-title">Human in the Loop</h3>
               <p className="vision__card-text">
                 AI augments, never replaces. Every analysis goes through an attorney
                 approval gate with a full audit trail for regulatory compliance.
@@ -153,9 +153,9 @@ export default function LandingPage() {
                   <line x1="12" y1="22.08" x2="12" y2="12" />
                 </svg>
               </div>
-              <h3 className="vision__card-title">Enterprise-Grade</h3>
+              <h3 className="vision__card-title">Enterprise Grade</h3>
               <p className="vision__card-text">
-                SOC 2 ready architecture with end-to-end encryption, MLflow observability,
+                SOC 2 ready architecture with encryption in transit and at rest, MLflow observability,
                 Kubernetes deployment, and CI/CD via Jenkins pipelines.
               </p>
             </div>
@@ -193,10 +193,10 @@ export default function LandingPage() {
         <div className="section__container">
           <span className="section__eyebrow">Interactive Pipeline</span>
           <h2 className="section__title">
-            From Ingestion to <span className="text-gradient">Attorney-Ready Report</span>
+            From Ingestion to <span className="text-gradient">Attorney Ready Report</span>
           </h2>
           <p className="section__description" style={{ maxWidth: "800px", margin: "0 auto 40px auto", textAlign: "center" }}>
-            Explore how our pipeline processes your contracts stage-by-stage. Click on any step to view its technical details, system agents, and live telemetry simulation.
+            Explore how our pipeline processes your contracts, stage by stage. Click on any step to view its technical details, system agents, and live telemetry simulation.
           </p>
 
           <div className="interactive-pipeline">
@@ -252,7 +252,7 @@ export default function LandingPage() {
               What Clauses Do We <span className="text-gradient">Analyze & Redline?</span>
             </h2>
             <p className="section__description" style={{ maxWidth: "800px", margin: "0 auto 40px auto", textAlign: "center" }}>
-              Select a clause type to explore common risk flags, compliance checks, and a comparison of original one-sided provisions versus mitigated, balanced suggestions.
+              Select a clause type to explore common risk flags, compliance checks, and a comparison of original one sided provisions versus mitigated, balanced suggestions.
             </p>
 
             <div className="clause-explorer-grid">
@@ -287,7 +287,7 @@ export default function LandingPage() {
 
                 <div className="diff-display">
                   <div className="diff-box diff-box--original">
-                    <span className="diff-box__label">Original Draft (One-Sided)</span>
+                    <span className="diff-box__label">Original Draft (One Sided)</span>
                     <p className="diff-box__text">{CLAUSE_EXPLORER_DATA[activeClause].original}</p>
                   </div>
                   <div className="diff-box diff-box--revised">
@@ -401,18 +401,18 @@ export default function LandingPage() {
 const FEATURES = [
   {
     title: "Vercel AI SDK Core",
-    desc: "Leverages the state-of-the-art Vercel AI SDK to orchestrate smart agents, stream completions with low latency, and enforce highly structured compliance JSON output schemas.",
+    desc: "Leverages the Vercel AI SDK, one of the most capable toolkits available for orchestrating AI agents, to stream completions with low latency and enforce strict, schema validated JSON output.",
     color: "indigo",
     icon: (
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M12 2L2 22h20L12 2z" />
       </svg>
     ),
-    tag: "Next-Gen AI",
+    tag: "Modern AI",
   },
   {
     title: "Go API Gateway",
-    desc: "Engineered using Fiber and Go for ultra-low latency request routing, asynchronous Redis job dispatching, and high-concurrency database connection pooling.",
+    desc: "Engineered using Fiber and Go for very low latency request routing, asynchronous Redis job dispatching, and high concurrency database connection pooling.",
     color: "cyan",
     icon: (
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -438,7 +438,7 @@ const FEATURES = [
   },
   {
     title: "Express Production Server",
-    desc: "Serves optimized React web assets securely, implementing dynamic wildcard fallbacks for React Router single-page application (SPA) routing.",
+    desc: "Serves optimized React web assets securely, implementing dynamic wildcard fallbacks for React Router single page application (SPA) routing.",
     color: "violet",
     icon: (
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -461,8 +461,8 @@ const FEATURES = [
     tag: "MCP Spec",
   },
   {
-    title: "Advanced Shield Security",
-    desc: "Multi-layered enterprise defense featuring role-based access control (RBAC), bcrypt password hashing, HTTP-only secure cookie rotations, and JWT session handling.",
+    title: "Private By Default",
+    desc: "No accounts, no passwords, nothing to remember. Every visitor gets an automatically isolated workspace the instant they arrive, with every request encrypted over HTTPS.",
     color: "orange",
     icon: (
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -470,7 +470,7 @@ const FEATURES = [
         <path d="M7 11V7a5 5 0 0 1 10 0v4" />
       </svg>
     ),
-    tag: "Secure",
+    tag: "Zero Setup",
   },
 ];
 
@@ -483,7 +483,7 @@ const PIPELINE_DETAILS = [
       "[info] Ingesting 'service_agreement_v2.docx'",
       "[info] Extracting document paragraphs...",
       "[success] Extracted 42 paragraphs, 14,230 characters.",
-      "[info] Sanitizing control characters & non-utf8 segments..."
+      "[info] Sanitizing control characters & non UTF8 segments..."
     ],
     technicalText: "The system reads raw binary DOCX structures, parses XML namespaces, sanitizes formatting overhead, and returns clean markdown/text content while retaining document flow indicators."
   },
@@ -493,7 +493,7 @@ const PIPELINE_DETAILS = [
     agent: "Clause Extraction Agent",
     log: [
       "[info] Starting paragraph segmentation...",
-      "[info] Invoking Llama-3.1 via Vercel AI SDK...",
+      "[info] Invoking GPT 4o via Vercel AI SDK...",
       "[info] Segmenting clauses by thematic boundaries & headings...",
       "[success] Extracted 12 key clauses (Indemnification, SLA, IP, etc.)",
       "[warning] 1 unnamed paragraph appended to preceding clause"
@@ -510,41 +510,41 @@ const PIPELINE_DETAILS = [
       "[info] Checking compliance against GDPR, CCPA, SOX...",
       "[warning] Clause 9 (Data Protection) missing standard GDPR Article 28 DPA references."
     ],
-    technicalText: "Using dynamic RAG-based calibration and regulatory rules, clauses are assessed for liability limits, compliance overrides, and score floors. Overall score is aggregated using a weighted floor algorithm."
+    technicalText: "Using dynamic RAG informed calibration and regulatory rules, clauses are assessed for liability limits, compliance overrides, and score floors. Overall score is aggregated using a weighted floor algorithm."
   },
   {
     title: "Agentic Redlining",
     emoji: "✏️",
     agent: "Redliner & Mitigation Agent",
     log: [
-      "[info] Preparing redlines for high-risk clauses (Score >= 60)...",
+      "[info] Preparing redlines for high risk clauses (Score >= 40)...",
       "[info] Redlining Clause 4 (Indemnification) from Provider to Client perspective...",
-      "[success] Generated revised text with tracked-changes.",
-      "[info] Re-evaluating mitigated clause risk: 85 -> 15 (Low Risk)"
+      "[success] Generated revised text with tracked changes.",
+      "[info] Reevaluating mitigated clause risk: 85 → 15 (Low Risk)"
     ],
-    technicalText: "The redlining agent strikes out one-sided clauses, replacing them with commercial-friendly terms. A self-correction loop scores the revision to ensure risk was actually mitigated."
+    technicalText: "The redlining agent strikes out one sided clauses, replacing them with commercially reasonable terms. A self correction loop scores the revision to ensure risk was actually mitigated."
   },
   {
     title: "Attorney Review",
     emoji: "✅",
-    agent: "Human-In-The-Loop Approval Gate",
+    agent: "Human In The Loop Approval Gate",
     log: [
       "[info] Compiling redlined DOCX and executive summary PDF...",
       "[info] Publishing review package to database: awaiting approval...",
       "[success] Audit trail logged: State ready for manual review.",
-      "[info] Ready for human sign-off."
+      "[info] Ready for human sign off."
     ],
-    technicalText: "Aggregated results are compiled into visual track-change documents (DOCX) and PDF reports. An approval gate blocks deployment until an attorney reviews the suggestions."
+    technicalText: "Aggregated results are compiled into visual tracked changes documents (DOCX) and PDF reports. An approval gate blocks deployment until an attorney reviews the suggestions."
   }
 ];
 
 const CLAUSE_EXPLORER_DATA = {
   indemnification: {
     name: "Indemnification",
-    description: "Deals with duty to defend and pay for damages arising from third-party lawsuits.",
-    checkpoints: ["Is it mutual?", "Are third-party IP claims capped?", "Are there clear exclusions for negligence?"],
+    description: "Deals with duty to defend and pay for damages arising from third party lawsuits.",
+    checkpoints: ["Is it mutual?", "Are third party IP claims capped?", "Are there clear exclusions for negligence?"],
     original: "Contractor shall indemnify, defend, and hold harmless Client from and against any and all claims, losses, liabilities, damages, and expenses without limit.",
-    revised: "Contractor shall indemnify, defend, and hold harmless Client from and against third-party claims arising from Contractor's gross negligence or willful misconduct, capped at the liability limit of this Agreement.",
+    revised: "Contractor shall indemnify, defend, and hold harmless Client from and against third party claims arising from Contractor's gross negligence or willful misconduct, capped at the liability limit of this Agreement.",
     rationale: "Balances the indemnity to prevent unlimited liability exposure and limits it to gross negligence."
   },
   liability: {
@@ -558,18 +558,18 @@ const CLAUSE_EXPLORER_DATA = {
   ip: {
     name: "Intellectual Property",
     description: "Determines ownership of existing IP and newly developed work product.",
-    checkpoints: ["Is work-for-hire explicitly defined?", "Are pre-existing materials licensed?", "Is there a clear transfer of ownership?"],
+    checkpoints: ["Is work for hire explicitly defined?", "Are preexisting materials licensed?", "Is there a clear transfer of ownership?"],
     original: "All materials, concepts, designs, and code created by Developer shall immediately become the absolute property of Client upon creation.",
-    revised: "All deliverables created specifically for Client shall become Client property upon full payment of outstanding invoices. Pre-existing materials remain Developer property.",
-    rationale: "Gates ownership transfer on payment receipt and preserves pre-existing intellectual property rights."
+    revised: "All deliverables created specifically for Client shall become Client property upon full payment of outstanding invoices. Preexisting materials remain Developer property.",
+    rationale: "Gates ownership transfer on payment receipt and preserves preexisting intellectual property rights."
   },
   data_protection: {
     name: "Data Protection / GDPR",
     description: "Governs personal data security, processing guidelines, and regulatory compliance.",
-    checkpoints: ["Are sub-processors listed?", "Is there a data breach notification window?", "Is DPA incorporated?"],
+    checkpoints: ["Are subprocessors listed?", "Is there a data breach notification window?", "Is DPA incorporated?"],
     original: "Provider will take reasonable measures to secure client data and will notify client of any security incident in due course.",
-    revised: "Provider will process personal data in compliance with GDPR and the DPA, implementing industry-standard security. Provider will notify Client of any confirmed data breach within 48 hours.",
-    rationale: "Establishes GDPR compliance and sets a concrete 48-hour notification window for breaches."
+    revised: "Provider will process personal data in compliance with GDPR and the DPA, implementing industry standard security. Provider will notify Client of any confirmed data breach within 48 hours.",
+    rationale: "Establishes GDPR compliance and sets a concrete 48 hour notification window for breaches."
   },
   governing_law: {
     name: "Governing Law",

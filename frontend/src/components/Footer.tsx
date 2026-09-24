@@ -23,7 +23,7 @@ export function Footer() {
               <span className="footer__brand-name">LexAI Pipeline</span>
             </Link>
             <p className="footer__tagline">
-              AI-powered contract analysis for modern legal teams.
+              AI powered contract analysis for modern legal teams.
               Analyze, score, and redline contracts in minutes.
             </p>
           </div>

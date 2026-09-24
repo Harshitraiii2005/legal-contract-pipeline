@@ -59,9 +59,9 @@ export default function Dashboard() {
           <span className="stat-card__desc">Contracts uploaded to pipeline</span>
         </div>
         <div className="stat-card" style={{ borderLeft: "3px solid var(--color-medium)" }}>
-          <span className="stat-card__label">Awaiting Sign-off</span>
+          <span className="stat-card__label">Awaiting Sign Off</span>
           <span className="stat-card__value" style={{ color: "var(--color-medium)" }}>{awaitingReview}</span>
-          <span className="stat-card__desc">Requires lawyer review & sign-off</span>
+          <span className="stat-card__desc">Requires lawyer review & sign off</span>
         </div>
         <div className="stat-card" style={{ borderLeft: "3px solid var(--color-low)" }}>
           <span className="stat-card__label">Approved & Executed</span>

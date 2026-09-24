@@ -50,7 +50,7 @@ export function ApprovalGate({
     <div className="approval-gate">
       <div className="approval-gate__header">
         <h2 className="approval-gate__title">Legal Execution Gate</h2>
-        <p className="approval-gate__subtitle">Sign-off required for: <strong>{contractName}</strong></p>
+        <p className="approval-gate__subtitle">Sign off required for: <strong>{contractName}</strong></p>
       </div>
 
       <div className="approval-gate__score" style={{ borderColor: "var(--color-border)" }}>
@@ -70,7 +70,7 @@ export function ApprovalGate({
             checked={checkedReview}
             onChange={(e) => setCheckedReview(e.target.checked)}
           />
-          <span>I have reviewed all critical and high-risk clauses extracted by the AI agents.</span>
+          <span>I have reviewed all critical and high risk clauses extracted by the AI agents.</span>
         </label>
         
         <label className="checklist-item">
