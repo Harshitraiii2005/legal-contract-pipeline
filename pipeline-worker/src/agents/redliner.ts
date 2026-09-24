@@ -1,7 +1,7 @@
 import { BaseAgent } from './base-agent';
 import { RiskScorer } from './risk-scorer';
 import { ClauseExtract, ClauseRiskScore, RedlineEdit, ContractReviewState } from '../pipeline/state';
-import { REDLINE_PROMPT } from '../prompts/redline';
+import { REDLINE_PROMPT, RedlineResultSchema } from '../prompts/redline';
 import { REDLINE_SCORE_THRESHOLD } from '../constants';
 import { diffToChanges } from '../utils/text-diff';
 
@@ -85,10 +85,10 @@ export class Redliner extends BaseAgent {
       .replace('{compliance_issues}', complianceIssues || 'None')
       .replace('{original_text}', clause.text);
 
-    let result = await this.callLlmJson(prompt);
+    let result = await this.callLlmObject(prompt, RedlineResultSchema);
     let revisedText = result.revised_text;
-    let attorneyNote = result.attorney_note || '';
-    let changes: RedlineEdit['changes'] = result.changes || [];
+    let attorneyNote = result.attorney_note;
+    let changes: RedlineEdit['changes'] = result.changes;
 
     // The model's `changes[].original` must be an exact substring of the
     // source clause — attorneys review redlines by locating "original" in
@@ -106,10 +106,10 @@ export class Redliner extends BaseAgent {
         `${JSON.stringify(unverified)}. Fix "changes" so every "original" is copied exactly ` +
         `from the ORIGINAL CLAUSE text above.`;
       try {
-        result = await this.callLlmJson(retryPrompt);
+        result = await this.callLlmObject(retryPrompt, RedlineResultSchema);
         revisedText = result.revised_text || revisedText;
         attorneyNote = result.attorney_note || attorneyNote;
-        changes = result.changes || [];
+        changes = result.changes;
         unverified = this.findUnverifiedChanges(changes, clause.text);
       } catch (e: any) {
         console.warn(`[redline_verification_retry_failed] Clause ID: ${clause.id}, Error: ${e.message}`);

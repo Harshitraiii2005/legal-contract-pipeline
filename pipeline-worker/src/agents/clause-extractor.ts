@@ -1,23 +1,8 @@
 import { BaseAgent } from './base-agent';
 import { ClauseExtract, ContractReviewState } from '../pipeline/state';
-import { EXTRACTION_PROMPT, PERSPECTIVE_PROMPT } from '../prompts/extraction';
+import { EXTRACTION_PROMPT, PERSPECTIVE_PROMPT, HeadingListSchema, PerspectiveSchema, CLAUSE_TYPES } from '../prompts/extraction';
 
-export const CLAUSE_TYPES = [
-  'indemnification',
-  'limitation_of_liability',
-  'termination',
-  'intellectual_property',
-  'confidentiality',
-  'payment',
-  'data_protection',
-  'service_level_agreement',
-  'dispute_resolution',
-  'governing_law',
-  'force_majeure',
-  'warranty',
-  'assignment',
-  'other',
-];
+export { CLAUSE_TYPES };
 
 const HEADING_PATTERN_GLOBAL = /(?:(?:Section|ARTICLE|CLAUSE)\s+(\d+))|(?:^|\n)\s*(\d+)\.\s+[A-Z]/gi;
 
@@ -31,7 +16,7 @@ function escapeRegExp(s: string): string {
 // back to a whitespace-tolerant match for minor formatting drift (extra
 // spaces, a stray newline). searchFrom keeps matches monotonic so a
 // duplicated heading string earlier in the document isn't matched twice.
-function findHeadingPosition(contractText: string, heading: string, searchFrom: number): number {
+export function findHeadingPosition(contractText: string, heading: string, searchFrom: number): number {
   const trimmed = (heading || '').trim();
   if (!trimmed) return -1;
 
@@ -62,11 +47,8 @@ export class ClauseExtractor extends BaseAgent {
     let representedParty = 'Client';
     try {
       const prompt = PERSPECTIVE_PROMPT.replace('{preamble}', preamble);
-      const result = await this.callLlmJson(prompt);
-      const detected = (result?.represented_party || 'Client').trim();
-      if (detected === 'Client' || detected === 'Provider') {
-        representedParty = detected;
-      }
+      const result = await this.callLlmObject(prompt, PerspectiveSchema);
+      representedParty = result.represented_party;
     } catch (e: any) {
       console.warn(`[perspective_detection_failed] Error: ${e.message}`);
     }
@@ -83,10 +65,10 @@ export class ClauseExtractor extends BaseAgent {
     const rawItems: HeadingItem[] = [];
     for (const chunk of chunks) {
       const prompt = EXTRACTION_PROMPT.replace('{types}', CLAUSE_TYPES.join(', ')).replace('{contract_text}', chunk);
-      const raw: any[] = await this.callLlmJson(prompt);
+      const raw = await this.callLlmObject(prompt, HeadingListSchema);
       for (const item of raw) {
-        if (item?.heading) {
-          rawItems.push({ heading: String(item.heading), type: item.type || 'other' });
+        if (item.heading) {
+          rawItems.push({ heading: item.heading, type: item.type });
         }
       }
     }

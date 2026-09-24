@@ -1,6 +1,6 @@
 import { BaseAgent } from './base-agent';
 import { ClauseExtract, ComplianceResult, ContractReviewState } from '../pipeline/state';
-import { COMPLIANCE_PROMPT, DEFAULT_FRAMEWORKS, clauseNeedsComplianceCheck } from '../prompts/compliance';
+import { COMPLIANCE_PROMPT, DEFAULT_FRAMEWORKS, clauseNeedsComplianceCheck, ComplianceResultSchema } from '../prompts/compliance';
 
 export { DEFAULT_FRAMEWORKS };
 
@@ -67,55 +67,16 @@ export class ComplianceChecker extends BaseAgent {
       .replace('{clause_type}', clause.type)
       .replace('{clause_text}', clause.text);
 
-    const result = await this.callLlmJson(prompt);
-
-    // Defensive parsing of recommendations
-    const rawRecs = result.recommendations || [];
-    const cleanRecs: string[] = [];
-    if (Array.isArray(rawRecs)) {
-      for (const r of rawRecs) {
-        if (r && typeof r === 'object') {
-          const val = r.recommendation || r.text || r.description || JSON.stringify(r);
-          cleanRecs.push(val);
-        } else if (r !== null && r !== undefined) {
-          cleanRecs.push(String(r));
-        }
-      }
-    } else if (rawRecs && typeof rawRecs === 'object') {
-      const val = rawRecs.recommendation || rawRecs.text || rawRecs.description || JSON.stringify(rawRecs);
-      cleanRecs.push(val);
-    } else if (rawRecs) {
-      cleanRecs.push(String(rawRecs));
-    }
-
-    // Defensive parsing of violations
-    const rawViolations = result.violations || [];
-    const cleanViolations: any[] = [];
-    if (Array.isArray(rawViolations)) {
-      for (const v of rawViolations) {
-        if (v && typeof v === 'object') {
-          const cleanV = { ...v };
-          if (cleanV.article === undefined || cleanV.article === null) {
-            cleanV.article = '';
-          } else {
-            cleanV.article = String(cleanV.article);
-          }
-          if (!cleanV.framework) {
-            cleanV.framework = 'Unknown';
-          }
-          if (!cleanV.description) {
-            cleanV.description = 'Compliance violation detected.';
-          }
-          cleanViolations.push(cleanV);
-        }
-      }
-    }
+    // ComplianceResultSchema enforces shape and applies the same defaults
+    // (missing framework -> "Unknown", missing article -> "", etc.) that
+    // used to be hand-rolled here field by field.
+    const result = await this.callLlmObject(prompt, ComplianceResultSchema);
 
     return {
       clause_id: clause.id,
-      compliant: result.compliant ?? true,
-      violations: cleanViolations,
-      recommendations: cleanRecs,
+      compliant: result.compliant,
+      violations: result.violations,
+      recommendations: result.recommendations,
     };
   }
 

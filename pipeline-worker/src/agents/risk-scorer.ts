@@ -1,7 +1,7 @@
 import { BaseAgent } from './base-agent';
 import { ClauseExtract, ClauseRiskScore, ContractReviewState } from '../pipeline/state';
 import { vectorStoreService } from '../services/vector-store';
-import { BATCH_SCORE_PROMPT, REASONING_FALLBACK_PROMPT } from '../prompts/scoring';
+import { BATCH_SCORE_PROMPT, REASONING_FALLBACK_PROMPT, BatchScoreSchema } from '../prompts/scoring';
 import { SEVERITY_THRESHOLDS } from '../constants';
 
 const MONEY_OR_NUMBER_PATTERN = /\$\s?[\d,]+(?:\.\d+)?|\b\d{2,}(?:,\d{3})*\b/g;
@@ -185,8 +185,8 @@ export class RiskScorer extends BaseAgent {
       .replace('{clauses_text}', clausesTexts.join('\n\n'));
 
     // 3. LLM call
-    const resultDict = await this.callLlmJson(prompt);
-    const results = resultDict.results || [];
+    const resultDict = await this.callLlmObject(prompt, BatchScoreSchema);
+    const results = resultDict.results;
 
     const scores: ClauseRiskScore[] = [];
     const hitsMap = new Map<number, any[]>();
@@ -200,13 +200,11 @@ export class RiskScorer extends BaseAgent {
     }
 
     for (const item of results) {
-      const cid = parseInt(item.clause_id, 10);
+      const cid = item.clause_id;
       const similar = hitsMap.get(cid) || [];
       const clauseText = textMap.get(cid) || '';
       const clauseType = typeMap.get(cid) || '';
-      let scoreVal = parseInt(item.score, 10);
-
-      scoreVal = calibrateScore(clauseText, scoreVal, clauseType);
+      let scoreVal = calibrateScore(clauseText, item.score, clauseType);
       const severityVal = getSeverity(scoreVal);
 
       let reasoning = (item.reasoning || '').trim();

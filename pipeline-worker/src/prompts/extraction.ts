@@ -4,6 +4,37 @@
 // out of the source in code (see clause-extractor.ts), so it is always
 // byte-for-byte what the contract says.
 
+import { z } from 'zod';
+
+export const CLAUSE_TYPES = [
+  'indemnification',
+  'limitation_of_liability',
+  'termination',
+  'intellectual_property',
+  'confidentiality',
+  'payment',
+  'data_protection',
+  'service_level_agreement',
+  'dispute_resolution',
+  'governing_law',
+  'force_majeure',
+  'warranty',
+  'assignment',
+  'other',
+] as const;
+
+export const HeadingListSchema = z.array(
+  z.object({
+    heading: z.string(),
+    type: z.enum(CLAUSE_TYPES).default('other'),
+  })
+);
+
+export const PerspectiveSchema = z.object({
+  represented_party: z.enum(['Client', 'Provider']),
+  explanation: z.string(),
+});
+
 export const EXTRACTION_PROMPT = `\
 You are a legal clause segmentation engine.
 

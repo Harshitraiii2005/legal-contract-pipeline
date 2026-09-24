@@ -1,3 +1,19 @@
+import { z } from 'zod';
+
+export const ComplianceResultSchema = z.object({
+  compliant: z.boolean().default(true),
+  violations: z
+    .array(
+      z.object({
+        framework: z.string().default('Unknown'),
+        article: z.coerce.string().default(''),
+        description: z.string().default('Compliance violation detected.'),
+      })
+    )
+    .default([]),
+  recommendations: z.array(z.string()).default([]),
+});
+
 export const COMPLIANCE_PROMPT = `\
 You are a legal compliance specialist. Check if the following contract clause
 violates or creates risk under any of the listed regulatory frameworks.

@@ -5,6 +5,20 @@
 // silently teaches the model the wrong direction whenever the represented
 // party is the other one.
 
+import { z } from 'zod';
+
+export const ScoreItemSchema = z.object({
+  clause_id: z.coerce.number().int(),
+  risk_perspective: z.string(),
+  score: z.coerce.number().int().min(0).max(100),
+  reasoning: z.string(),
+  flags: z.array(z.string()).default([]),
+});
+
+export const BatchScoreSchema = z.object({
+  results: z.array(ScoreItemSchema),
+});
+
 export const BATCH_SCORE_PROMPT = `\
 You are a senior contract risk analyst. Score the following batch of contract clauses for legal risk specifically from the perspective of our company ({represented_party}).
 

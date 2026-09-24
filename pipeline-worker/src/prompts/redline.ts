@@ -3,6 +3,23 @@
 // model has a coin-flip chance of "fixing" the clause in the counterparty's
 // favor instead of ours.
 
+import { z } from 'zod';
+
+export const RedlineResultSchema = z.object({
+  revised_text: z.string(),
+  changes: z
+    .array(
+      z.object({
+        type: z.string().default('edit'),
+        original: z.string().default(''),
+        replacement: z.string().default(''),
+        rationale: z.string().default(''),
+      })
+    )
+    .default([]),
+  attorney_note: z.string().default(''),
+});
+
 export const REDLINE_PROMPT = `\
 You are an expert contract attorney representing our company ({represented_party}) in this deal. The following clause (type: {clause_type}) has been flagged as
 high-risk to our company. Propose a revised version that reduces risk to our
