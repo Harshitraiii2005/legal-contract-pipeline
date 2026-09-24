@@ -16,8 +16,7 @@ export function useWebSocket(contractId?: string) {
     if (!contractId) return;
 
     const wsUrl = `${import.meta.env.VITE_WS_URL ?? "ws://localhost:8000"}/ws/pipeline/${contractId}`;
-    const token = localStorage.getItem("access_token");
-    const ws = new WebSocket(`${wsUrl}?token=${token}`);
+    const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
     ws.onopen = () => setConnected(true);

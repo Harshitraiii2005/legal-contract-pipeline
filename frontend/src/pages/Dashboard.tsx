@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { useReviewStore } from "../store/reviewStore";
 import { ContractUpload } from "../components/ContractUpload";
 
@@ -16,7 +16,6 @@ export default function Dashboard() {
   const { contracts, fetchContracts, loading } = useReviewStore();
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
-  const navigate = useNavigate();
 
   useEffect(() => {
     fetchContracts();
@@ -50,15 +49,6 @@ export default function Dashboard() {
             Review, redline, and analyze corporate contracts for compliance and risk.
           </p>
         </div>
-        <button
-          className="btn btn--ghost"
-          onClick={() => {
-            localStorage.clear();
-            navigate("/login");
-          }}
-        >
-          Sign out
-        </button>
       </header>
 
       {/* KPI Stats Section */}

@@ -5,12 +5,10 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/compress"
 	"github.com/gofiber/fiber/v2/middleware/cors"
-	"github.com/gofiber/fiber/v2/middleware/limiter"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/joho/godotenv"
@@ -18,7 +16,6 @@ import (
 	"github.com/lexai/backend-go/config"
 	"github.com/lexai/backend-go/db"
 	"github.com/lexai/backend-go/handlers"
-	"github.com/lexai/backend-go/middleware"
 	"github.com/lexai/backend-go/services"
 )
 
@@ -72,37 +69,17 @@ func main() {
 	})
 
 	// ── Handlers ──────────────────────────────────────────────────────
-	authHandler := handlers.NewAuthHandler(cfg)
 	contractHandler := handlers.NewContractHandler(cfg, storage, queue)
 	reviewHandler := handlers.NewReviewHandler(cfg)
 
-	// ── Public Routes ─────────────────────────────────────────────────
+	// ── Routes ────────────────────────────────────────────────────────
+	// No auth: every route below is open to any caller. There is no login,
+	// no per-caller identity, and nothing scoped to "the current user" —
+	// contracts and reviews are shared across everyone who can reach this API.
 	api := app.Group("/api/v1")
 
-	// Rate limit the credential-guessing surface: 10 attempts per minute per
-	// IP, shared across register/login/refresh since all three let an
-	// attacker test credentials or tokens.
-	authLimiter := limiter.New(limiter.Config{
-		Max:        10,
-		Expiration: 1 * time.Minute,
-		LimitReached: func(c *fiber.Ctx) error {
-			return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{"detail": "Too many attempts. Please try again in a minute."})
-		},
-	})
-
-	auth := api.Group("/auth", authLimiter)
-	auth.Post("/register", authHandler.Register)
-	auth.Post("/login", authHandler.Login)
-	auth.Post("/refresh", authHandler.Refresh)
-
-	// ── Protected Routes ──────────────────────────────────────────────
-	protected := api.Group("", middleware.AuthMiddleware(cfg))
-
-	// Auth — me
-	protected.Get("/auth/me", authHandler.Me)
-
 	// Contracts
-	contracts := protected.Group("/contracts")
+	contracts := api.Group("/contracts")
 	contracts.Post("/upload", contractHandler.Upload)
 	contracts.Get("/", contractHandler.List)
 	contracts.Get("/:id", contractHandler.Get)
@@ -110,7 +87,7 @@ func main() {
 	contracts.Get("/:id/download/report", contractHandler.DownloadReport)
 
 	// Reviews
-	reviews := protected.Group("/reviews")
+	reviews := api.Group("/reviews")
 	reviews.Get("/:contract_id", reviewHandler.GetReview)
 	reviews.Post("/:contract_id/approve", reviewHandler.SubmitApproval)
 	reviews.Get("/:contract_id/audit", reviewHandler.GetAuditTrail)

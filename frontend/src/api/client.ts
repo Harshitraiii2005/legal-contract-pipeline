@@ -1,96 +1,15 @@
-import axios, { AxiosError, InternalAxiosRequestConfig } from "axios";
+import axios from "axios";
 
 const BASE_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000/api/v1";
 
+// No auth: no token to attach, no 401-refresh flow. Every request here is
+// anonymous, and the backend treats contracts/reviews as shared rather than
+// scoped to a caller.
 export const apiClient = axios.create({
   baseURL: BASE_URL,
   timeout: 60_000,
   headers: { "Content-Type": "application/json" },
 });
-
-// ── Request interceptor: attach token ─────────────────────────────────────────
-apiClient.interceptors.request.use((config: InternalAxiosRequestConfig) => {
-  const token = localStorage.getItem("access_token");
-  if (token && config.headers) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
-
-// ── Response interceptor: handle 401 refresh ─────────────────────────────────
-let isRefreshing = false;
-let failedQueue: Array<{ resolve: (v: string) => void; reject: (e: unknown) => void }> = [];
-
-function processQueue(error: unknown, token: string | null) {
-  failedQueue.forEach((p) => (error ? p.reject(error) : p.resolve(token!)));
-  failedQueue = [];
-}
-
-// Endpoints that should NEVER trigger the refresh-and-retry flow below.
-// A 401 from /auth/login means "wrong credentials" — there is no token to
-// refresh, and trying to refresh (with a null refresh_token) was previously
-// causing a hard redirect to /login that wiped the error message before
-// React could render it. /auth/register and /auth/refresh have the same
-// problem for the same reason.
-const AUTH_ENDPOINTS = ["/auth/login", "/auth/register", "/auth/refresh"];
-
-function isAuthEndpoint(url?: string): boolean {
-  return Boolean(url && AUTH_ENDPOINTS.some((p) => url.includes(p)));
-}
-
-apiClient.interceptors.response.use(
-  (response) => response,
-  async (error: AxiosError) => {
-    const original = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
-
-    // Let auth endpoints fail normally — the caller's own try/catch (e.g.
-    // Login.tsx) handles displaying "Invalid credentials" etc.
-    if (isAuthEndpoint(original?.url)) {
-      return Promise.reject(error);
-    }
-
-    if (error.response?.status === 401 && !original._retry) {
-      const hasRefreshToken = Boolean(localStorage.getItem("refresh_token"));
-
-      // No refresh token means the user was never logged in — there is
-      // nothing to refresh, so don't attempt it or redirect; just fail.
-      if (!hasRefreshToken) {
-        return Promise.reject(error);
-      }
-
-      if (isRefreshing) {
-        return new Promise((resolve, reject) => {
-          failedQueue.push({ resolve, reject });
-        }).then((token) => {
-          original.headers!.Authorization = `Bearer ${token}`;
-          return apiClient(original);
-        });
-      }
-
-      original._retry = true;
-      isRefreshing = true;
-
-      try {
-        const refresh = localStorage.getItem("refresh_token");
-        const { data } = await axios.post(`${BASE_URL}/auth/refresh`, { refresh_token: refresh });
-        localStorage.setItem("access_token", data.access_token);
-        localStorage.setItem("refresh_token", data.refresh_token);
-        processQueue(null, data.access_token);
-        original.headers!.Authorization = `Bearer ${data.access_token}`;
-        return apiClient(original);
-      } catch (err) {
-        processQueue(err, null);
-        localStorage.clear();
-        window.location.href = "/login";
-        return Promise.reject(err);
-      } finally {
-        isRefreshing = false;
-      }
-    }
-
-    return Promise.reject(error);
-  }
-);
 
 // ── Typed API helpers ─────────────────────────────────────────────────────────
 
@@ -172,12 +91,4 @@ export const reviewsApi = {
     apiClient.post(`/reviews/${contractId}/approve`, { approved, notes }),
   audit: (contractId: string) =>
     apiClient.get<AuditEvent[]>(`/reviews/${contractId}/audit`),
-};
-
-export const authApi = {
-  login: (email: string, password: string) =>
-    apiClient.post<{ access_token: string; refresh_token: string }>("/auth/login", { email, password }),
-  register: (email: string, password: string, full_name = "") =>
-    apiClient.post("/auth/register", { email, password, full_name }),
-  me: () => apiClient.get("/auth/me"),
 };

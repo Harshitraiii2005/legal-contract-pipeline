@@ -32,7 +32,7 @@ graph TD
 
     subgraph Gateway Layer [Ingress & Security]
         GW[Go API Gateway <br> Fiber - port 8000]
-        FE -->|REST API & Auth| GW
+        FE -->|REST API| GW
     end
 
     subgraph Storage & Queues [State & Communication]
@@ -90,11 +90,11 @@ graph TD
 
 | Component | Technology | Description |
 | :--- | :--- | :--- |
-| **API Gateway** | Go, Fiber, pgx, JWT | Ingress controller, security boundary, user auth, metadata storage |
+| **API Gateway** | Go, Fiber, pgx | Ingress controller, contract/review metadata storage (no auth — open API) |
 | **Pipeline Worker** | Node.js, TypeScript, BullMQ | Background async consumer for contract processing |
 | **Orchestrator** | Vercel AI SDK, OpenAI, Pinecone | Multi-agent state machine (Extractor, Scorer, Compliance, Redliner) |
 | **Frontend** | React SPA, Vite, Express | Beautiful dark-themed dashboard; served via node Express |
-| **Databases** | PostgreSQL, Redis | User data, audit ledger, and worker message queue |
+| **Databases** | PostgreSQL, Redis | Contract/review data, audit ledger, and worker message queue |
 | **Integrations** | Model Context Protocol (MCP) | Exposes legal analysis tools to Cursor, Claude, and local scripts |
 
 ---

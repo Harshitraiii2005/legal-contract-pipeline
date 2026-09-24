@@ -9,3 +9,5 @@ backend/.coverage
 .env
 evals/results/*.tmp.json
 node_modules/
+backend-go/lexai-api
+backend-go/app

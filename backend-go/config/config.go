@@ -9,9 +9,8 @@ import (
 // Config holds all application configuration loaded from environment variables.
 type Config struct {
 	// App
-	Env       string
-	Debug     bool
-	SecretKey string
+	Env   string
+	Debug bool
 
 	// Database
 	DatabaseURL   string
@@ -33,11 +32,6 @@ type Config struct {
 	// MLflow
 	MLflowTrackingURI string
 
-	// Auth
-	JWTAlgorithm            string
-	AccessTokenExpireMinutes int
-	RefreshTokenExpireDays   int
-
 	// Storage
 	StorageRoot string
 
@@ -57,9 +51,8 @@ type Config struct {
 // Load reads configuration from environment variables.
 func Load() *Config {
 	return &Config{
-		Env:       getEnv("ENV", "development"),
-		Debug:     getEnvBool("DEBUG", false),
-		SecretKey: getEnv("SECRET_KEY", ""),
+		Env:   getEnv("ENV", "development"),
+		Debug: getEnvBool("DEBUG", false),
 
 		DatabaseURL:   getEnv("DATABASE_URL", "postgresql://legal:legal@localhost:5432/legaldb"),
 		DBPoolSize:    getEnvInt("DB_POOL_SIZE", 10),
@@ -75,10 +68,6 @@ func Load() *Config {
 		PineconeIndex:  getEnv("PINECONE_INDEX", "contract-clauses"),
 
 		MLflowTrackingURI: getEnv("MLFLOW_TRACKING_URI", "http://localhost:5000"),
-
-		JWTAlgorithm:            "HS256",
-		AccessTokenExpireMinutes: getEnvInt("ACCESS_TOKEN_EXPIRE_MINUTES", 480),
-		RefreshTokenExpireDays:   getEnvInt("REFRESH_TOKEN_EXPIRE_DAYS", 30),
 
 		StorageRoot: getEnv("STORAGE_ROOT", "/data/legal-pipeline"),
 

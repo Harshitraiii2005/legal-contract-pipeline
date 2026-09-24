@@ -2,35 +2,6 @@ package models
 
 import "time"
 
-// User matches the existing `users` table.
-type User struct {
-	ID             string    `json:"id"`
-	Email          string    `json:"email"`
-	HashedPassword string    `json:"-"`
-	FullName       string    `json:"full_name"`
-	Role           string    `json:"role"`
-	IsActive       bool      `json:"is_active"`
-	CreatedAt      time.Time `json:"created_at"`
-	UpdatedAt      time.Time `json:"updated_at"`
-}
-
-// Contract matches the existing `contracts` table.
-type Contract struct {
-	ID               string    `json:"id"`
-	OwnerID          string    `json:"owner_id"`
-	Name             string    `json:"name"`
-	OriginalFilename string    `json:"original_filename"`
-	FileType         string    `json:"file_type"`
-	StorageKey       string    `json:"storage_key"`
-	RawText          string    `json:"raw_text,omitempty"`
-	ClauseCount      int       `json:"clause_count"`
-	OverallRiskScore int       `json:"overall_risk_score"`
-	Status           string    `json:"status"`
-	ThreadID         string    `json:"thread_id"`
-	CreatedAt        time.Time `json:"created_at"`
-	UpdatedAt        time.Time `json:"updated_at"`
-}
-
 // ContractOut is the API response for a contract (matches Python ContractOut).
 type ContractOut struct {
 	ID               string `json:"id"`
@@ -102,37 +73,7 @@ type AuditLogOut struct {
 
 // ── Request/Response Schemas ────────────────────────────────────────────────
 
-type RegisterRequest struct {
-	Email    string `json:"email"`
-	Password string `json:"password"`
-	FullName string `json:"full_name"`
-	Role     string `json:"role"`
-}
-
-type LoginRequest struct {
-	Email    string `json:"email"`
-	Password string `json:"password"`
-}
-
-type TokenResponse struct {
-	AccessToken  string `json:"access_token"`
-	RefreshToken string `json:"refresh_token"`
-	TokenType    string `json:"token_type"`
-}
-
-type UserResponse struct {
-	ID        string    `json:"id"`
-	Email     string    `json:"email"`
-	FullName  string    `json:"full_name"`
-	Role      string    `json:"role"`
-	CreatedAt time.Time `json:"created_at"`
-}
-
 type ApprovalRequest struct {
 	Approved bool   `json:"approved"`
 	Notes    string `json:"notes"`
-}
-
-type RefreshRequest struct {
-	RefreshToken string `json:"refresh_token"`
 }

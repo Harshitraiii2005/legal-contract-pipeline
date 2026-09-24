@@ -1,16 +1,24 @@
 -- Schema for backend-go. Run this once against a fresh database before the
 -- first deploy (e.g. `psql "$DATABASE_URL" -f schema.sql`, or paste into
--- Render's Postgres "Connect" > psql shell).
+-- Render's Postgres "Connect" > psql shell). Safe to re-run against a
+-- database this was already applied to — every statement is idempotent.
 --
 -- backend-go has no migration runner of its own — it was built assuming a
 -- database already migrated by the legacy Python backend's Alembic
 -- migrations (backend/alembic/versions/). This file is those two
 -- migrations (0001_initial + add_represented_party) merged into one
--- idempotent script, with one correction: the Go code consistently reads
--- and writes contracts.storage_key (models/models.go, handlers/contracts.go),
--- but the Alembic migration named that column s3_key — that mismatch would
--- 500 on the very next upload after auth starts working. This schema uses
--- storage_key so the database matches what the Go code actually expects.
+-- script, with corrections:
+--   - The Go code consistently reads and writes contracts.storage_key
+--     (models/models.go, handlers/contracts.go), but the Alembic migration
+--     named that column s3_key. Uses storage_key so the schema matches
+--     what the Go code actually queries.
+--   - The app has no login (auth was removed entirely — contracts and
+--     reviews are shared, not scoped to a caller), so contracts.owner_id
+--     is never populated. It's kept as a nullable column rather than
+--     dropped outright, in case per-user ownership is reintroduced later.
+--     The `users` table likewise stays only as the (currently empty)
+--     target of reviews.reviewer_id / audit_logs.user_id, both nullable
+--     and never populated either.
 
 CREATE SCHEMA IF NOT EXISTS audit;
 
@@ -28,7 +36,7 @@ CREATE INDEX IF NOT EXISTS ix_users_email ON users (email);
 
 CREATE TABLE IF NOT EXISTS contracts (
     id                  TEXT PRIMARY KEY,
-    owner_id            TEXT NOT NULL REFERENCES users (id),
+    owner_id            TEXT REFERENCES users (id),
     name                VARCHAR(500) NOT NULL,
     original_filename   VARCHAR(500) NOT NULL DEFAULT '',
     file_type           VARCHAR(20) NOT NULL DEFAULT 'pdf',
@@ -41,7 +49,11 @@ CREATE TABLE IF NOT EXISTS contracts (
     created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-CREATE INDEX IF NOT EXISTS ix_contracts_owner_id ON contracts (owner_id);
+
+-- Relaxes owner_id to nullable for anyone who already applied an earlier
+-- version of this script with the NOT NULL constraint. A no-op if the
+-- column is already nullable.
+ALTER TABLE contracts ALTER COLUMN owner_id DROP NOT NULL;
 
 CREATE TABLE IF NOT EXISTS reviews (
     id                  TEXT PRIMARY KEY,

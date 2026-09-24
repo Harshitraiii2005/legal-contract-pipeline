@@ -23,17 +23,16 @@ func NewReviewHandler(cfg *config.Config) *ReviewHandler {
 
 // GetReview returns the review details for a contract.
 func (h *ReviewHandler) GetReview(c *fiber.Ctx) error {
-	userID := c.Locals("user_id").(string)
 	contractID := c.Params("contract_id")
 
 	var review models.Review
 	err := db.Pool.QueryRow(context.Background(),
-		`SELECT r.id, r.contract_id, r.overall_score, r.executive_summary,
-		        r.clauses, r.risk_scores, r.compliance_results, r.redline_edits,
-		        r.approved, r.reviewer_notes, r.decided_at, r.represented_party
-		 FROM reviews r JOIN contracts c ON c.id = r.contract_id
-		 WHERE r.contract_id = $1 AND c.owner_id = $2`,
-		contractID, userID).Scan(
+		`SELECT id, contract_id, overall_score, executive_summary,
+		        clauses, risk_scores, compliance_results, redline_edits,
+		        approved, reviewer_notes, decided_at, represented_party
+		 FROM reviews
+		 WHERE contract_id = $1`,
+		contractID).Scan(
 		&review.ID, &review.ContractID, &review.OverallScore, &review.ExecutiveSummary,
 		&review.Clauses, &review.RiskScores, &review.ComplianceResults, &review.RedlineEdits,
 		&review.Approved, &review.ReviewerNotes, &review.DecidedAt, &review.RepresentedParty,
@@ -68,27 +67,20 @@ func (h *ReviewHandler) GetReview(c *fiber.Ctx) error {
 
 // SubmitApproval handles approve/reject decision.
 func (h *ReviewHandler) SubmitApproval(c *fiber.Ctx) error {
-	userID := c.Locals("user_id").(string)
-	userRole, _ := c.Locals("user_role").(string)
 	contractID := c.Params("contract_id")
-
-	// RBAC check — only roles with "approve" permission
-	if userRole != "admin" && userRole != "lawyer" {
-		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"detail": "Permission 'approve' required"})
-	}
 
 	var req models.ApprovalRequest
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"detail": "Invalid request body"})
 	}
 
-	// Verify contract ownership and status
+	// Verify contract exists and is awaiting approval
 	var contractStatus, reviewID string
 	err := db.Pool.QueryRow(context.Background(),
 		`SELECT c.status, r.id FROM contracts c
 		 LEFT JOIN reviews r ON r.contract_id = c.id
-		 WHERE c.id = $1 AND c.owner_id = $2`,
-		contractID, userID).Scan(&contractStatus, &reviewID)
+		 WHERE c.id = $1`,
+		contractID).Scan(&contractStatus, &reviewID)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"detail": "Contract not found"})
 	}
@@ -104,11 +96,11 @@ func (h *ReviewHandler) SubmitApproval(c *fiber.Ctx) error {
 		newStatus = "rejected"
 	}
 
-	// Update review
+	// Update review (reviewer_id stays NULL — there's no caller identity without auth)
 	_, err = db.Pool.Exec(context.Background(),
-		`UPDATE reviews SET approved = $1, reviewer_id = $2, reviewer_notes = $3, decided_at = $4, updated_at = $5
-		 WHERE contract_id = $6`,
-		req.Approved, userID, req.Notes, now, now, contractID)
+		`UPDATE reviews SET approved = $1, reviewer_notes = $2, decided_at = $3, updated_at = $4
+		 WHERE contract_id = $5`,
+		req.Approved, req.Notes, now, now, contractID)
 	if err != nil {
 		log.Printf("[reviews] Update review error: %v", err)
 	}
@@ -122,7 +114,7 @@ func (h *ReviewHandler) SubmitApproval(c *fiber.Ctx) error {
 	}
 
 	// Audit event
-	writeAuditEvent(contractID, "approval_submitted", &userID, &reviewID, nil,
+	writeAuditEvent(contractID, "approval_submitted", nil, &reviewID, nil,
 		map[string]interface{}{"approved": req.Approved, "notes": req.Notes})
 
 	return c.JSON(fiber.Map{"contract_id": contractID, "status": newStatus})
@@ -130,14 +122,12 @@ func (h *ReviewHandler) SubmitApproval(c *fiber.Ctx) error {
 
 // GetAuditTrail returns the audit log for a contract.
 func (h *ReviewHandler) GetAuditTrail(c *fiber.Ctx) error {
-	userID := c.Locals("user_id").(string)
 	contractID := c.Params("contract_id")
 
-	// Verify ownership
 	var exists bool
 	err := db.Pool.QueryRow(context.Background(),
-		`SELECT EXISTS(SELECT 1 FROM contracts WHERE id = $1 AND owner_id = $2)`,
-		contractID, userID).Scan(&exists)
+		`SELECT EXISTS(SELECT 1 FROM contracts WHERE id = $1)`,
+		contractID).Scan(&exists)
 	if err != nil || !exists {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"detail": "Contract not found"})
 	}
