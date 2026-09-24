@@ -1,44 +1,8 @@
 import { BaseAgent } from './base-agent';
 import { ClauseExtract, ComplianceResult, ContractReviewState } from '../pipeline/state';
+import { COMPLIANCE_PROMPT, DEFAULT_FRAMEWORKS, clauseNeedsComplianceCheck } from '../prompts/compliance';
 
-const COMPLIANCE_PROMPT = `\
-You are a legal compliance specialist. Check if the following contract clause
-violates or creates risk under any of the listed regulatory frameworks.
-
-Frameworks to check: {frameworks}
-
-## Strict Applicability Rules:
-- **HIPAA**: ONLY applies if the contract explicitly involves Protected Health Information (PHI), medical records, or healthcare-related activities. If the clause does not deal with PHI or healthcare-related activities, mark as compliant for HIPAA. Do NOT raise false positives on generic data storage or API services.
-- **SOX (Sarbanes-Oxley)**: ONLY applies to financial accounting, internal audit controls, corporate governance, executive certification of financial reports, or fraudulent financial reporting. Under no circumstances should general SLAs, uptime guarantees, technical support parameters, or API response times be flagged under SOX.
-- **PCI-DSS**: ONLY applies if payment card details, cardholder data, or credit card transactions are processed. We use strict evidence-gating: if the contract references standard cardholder data security measures or states general compliance, it must be treated as compliant. Do NOT flag the lack of specific version numbers (e.g., v4.0) or minor administrative details as violations.
-- **FCPA**: ONLY applies to anti-bribery, anti-corruption, dealings with government officials, and ethical conduct.
-- **GDPR / CCPA / UK GDPR**: ONLY apply if personal data (especially of EU/California/UK residents) is processed under the contract.
-
-Clause:
-Type: {clause_type}
-Text:
-{clause_text}
-
-Return a JSON object with:
-  - "compliant": boolean — true if no violations found (set to true if no applicable framework is violated)
-  - "violations": list of objects, each with:
-      - "framework": name of the regulation
-      - "article": specific article/section (if known)
-      - "description": 1–2 sentence explanation of the issue (explain why it is a real violation of this specific regulation, avoiding generic statements)
-  - "recommendations": list of short, concrete fix suggestions. Each recommendation must include specific language, thresholds, or default values (e.g. "Add a clause specifying a standard 30-day cure period for material breach" instead of just "specify a cure period") to make them actionable.
-
-Return ONLY valid JSON.
-`.trim();
-
-export const DEFAULT_FRAMEWORKS = [
-  'GDPR',
-  'CCPA',
-  'HIPAA',
-  'SOX',
-  'FCPA',
-  'UK GDPR',
-  'PCI-DSS',
-];
+export { DEFAULT_FRAMEWORKS };
 
 export class ComplianceChecker extends BaseAgent {
   readonly agentName = 'compliance_checker';
@@ -50,68 +14,16 @@ export class ComplianceChecker extends BaseAgent {
     this.frameworks = frameworks || DEFAULT_FRAMEWORKS;
   }
 
-  private determineFrameworks(clauses: ClauseExtract[]): string[] {
-    const govLawTexts: string[] = [];
-    for (const c of clauses) {
-      if (c.type === 'governing_law') {
-        govLawTexts.push((c.text || '').toLowerCase());
-      }
-    }
-
-    if (govLawTexts.length === 0) {
-      return this.frameworks;
-    }
-
-    const frameworksSet = new Set<string>();
-
-    // CCPA for California
-    if (govLawTexts.some((t) => t.includes('california') || t.includes(' ca ') || t.includes(', ca'))) {
-      frameworksSet.add('CCPA');
-    }
-
-    // GDPR for Europe/EU countries
-    const euKeywords = ['european union', ' eu ', 'germany', 'france', 'ireland', 'netherlands', 'belgium', 'switzerland'];
-    if (govLawTexts.some((t) => euKeywords.some((kw) => t.includes(kw)))) {
-      frameworksSet.add('GDPR');
-    }
-
-    // UK GDPR for United Kingdom/England/Wales/Scotland
-    const ukKeywords = ['united kingdom', 'uk ', ' uk', 'england', 'wales', 'london', 'great britain'];
-    if (govLawTexts.some((t) => ukKeywords.some((kw) => t.includes(kw)))) {
-      frameworksSet.add('UK GDPR');
-    }
-
-    // US Federal laws (SOX, HIPAA, FCPA) if US or Delaware or New York governs
-    const usKeywords = ['delaware', 'new york', 'united states', ' u.s.', 'us law', 'federal law'];
-    if (govLawTexts.some((t) => usKeywords.some((kw) => t.includes(kw)))) {
-      frameworksSet.add('SOX');
-      frameworksSet.add('FCPA');
-      frameworksSet.add('HIPAA');
-    }
-
-    // PCI-DSS if payment or credit cards are involved
-    let hasPayment = false;
-    for (const c of clauses) {
-      if (c.type === 'payment' || (c.text || '').toLowerCase().includes('credit card')) {
-        hasPayment = true;
-        break;
-      }
-    }
-    if (hasPayment) {
-      frameworksSet.add('PCI-DSS');
-    }
-
-    if (frameworksSet.size === 0) {
-      return this.frameworks;
-    }
-
-    return Array.from(frameworksSet).sort();
-  }
-
   async execute(state: ContractReviewState): Promise<Partial<ContractReviewState>> {
     const clauses = state.clauses || [];
-    const activeFrameworks = this.determineFrameworks(clauses);
-    console.log(`[compliance_active_frameworks] Frameworks: ${activeFrameworks.join(', ')}`);
+    // Every framework is always checked; applicability is decided by the
+    // model from each clause's own content per COMPLIANCE_PROMPT's
+    // applicability rules, not pre-selected from the contract's governing
+    // law. Jurisdiction is a weak proxy — a US-governed contract might
+    // process EU residents' data (GDPR still applies) or a UK-governed one
+    // might process none (GDPR/UK GDPR don't), and pre-selecting by
+    // jurisdiction keywords made those cases unreachable.
+    const activeFrameworks = this.frameworks;
 
     const results = await this.checkAll(clauses, activeFrameworks);
     let violationCount = 0;
@@ -135,16 +47,12 @@ export class ComplianceChecker extends BaseAgent {
   }
 
   private async checkAll(clauses: ClauseExtract[], frameworks: string[]): Promise<ComplianceResult[]> {
-    const relevantTypes = new Set([
-      'confidentiality',
-      'data_protection',
-      'intellectual_property',
-      'payment',
-      'indemnification',
-    ]);
-
+    // Gate on clause content, not just clause type — a data-processing
+    // obligation can live inside a clause the extractor typed
+    // "service_level_agreement" or "other", and type-only gating skipped
+    // those (see clauseNeedsComplianceCheck in src/prompts/compliance.ts).
     const tasks = clauses.map((c) => {
-      if (relevantTypes.has(c.type)) {
+      if (clauseNeedsComplianceCheck(c.type, c.text)) {
         return this.checkClause(c, frameworks);
       } else {
         return this.skipClause(c);
