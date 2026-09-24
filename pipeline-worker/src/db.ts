@@ -4,19 +4,34 @@ import crypto from 'crypto';
 
 // This app's tables live in the "lexai" schema, not "public" — see
 // backend-go/schema.sql for why (DATABASE_URL may point at a Postgres
-// instance shared with an unrelated app). `options` is sent as part of
-// Postgres's connection startup handshake itself (equivalent to libpq's
-// PGOPTIONS), so search_path is guaranteed to be set before any query can
-// run on the connection — unlike a `pool.on('connect', ...)` handler, which
-// doesn't block the pool from handing that connection to a caller before
-// the handler's own query finishes. "contracts"/"reviews" below resolve
-// into "lexai" without being schema-qualified; audit.audit_logs stays
-// explicitly schema-qualified (see writeAuditEvent below) and is
+// instance shared with an unrelated app). "contracts"/"reviews" below
+// resolve into "lexai" without being schema-qualified; audit.audit_logs
+// stays explicitly schema-qualified (see writeAuditEvent below) and is
 // unaffected by this.
+//
+// This used to be the `options: '-c search_path=...'` startup parameter,
+// which is set atomically during the connection handshake with no
+// ordering risk — but it caused every query to fail with "Connection
+// terminated unexpectedly" in production. The working theory: Render's
+// *internal* Postgres URL (recommended for service-to-service traffic,
+// unlike the external URL this was tested against beforehand) may route
+// through a connection pooler that doesn't support arbitrary startup
+// options and resets the connection rather than erroring cleanly. `SET
+// search_path` as a normal query on 'connect' is the more broadly
+// compatible approach. It's not actually racy despite appearances: pg's
+// Pool fires 'connect' synchronously and this handler's client.query()
+// call enqueues onto that client's single-connection FIFO query queue
+// before the pool can hand the client to any other waiting caller in the
+// same tick, so this always runs first.
 export const pool = new Pool({
   connectionString: config.databaseUrl,
   ssl: { rejectUnauthorized: false },
-  options: '-c search_path=lexai,public',
+});
+
+pool.on('connect', (client) => {
+  client.query('SET search_path TO lexai, public').catch((err) => {
+    console.error('[db] Failed to set search_path:', err.message);
+  });
 });
 
 export async function updateContractStatus(
