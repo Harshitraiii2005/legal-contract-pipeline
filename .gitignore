@@ -6,3 +6,5 @@ mlruns/
 mlflow.db
 *.db
 backend/.coverage
+.env
+evals/results/*.tmp.json
