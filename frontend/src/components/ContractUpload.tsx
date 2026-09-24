@@ -3,17 +3,28 @@ import { useNavigate } from "react-router-dom";
 import { useReviewStore } from "../store/reviewStore";
 
 const ACCEPTED = ".pdf,.docx,.doc";
+const ACCEPTED_EXTENSIONS = ACCEPTED.split(",");
 const MAX_MB = 50;
 
 export function ContractUpload() {
   const [dragging, setDragging] = useState(false);
   const [file, setFile] = useState<File | null>(null);
+  const [localError, setLocalError] = useState("");
   const { uploadContract, loading, error, clearError } = useReviewStore();
   const navigate = useNavigate();
 
+  // handles both the file picker (already filtered by `accept`) and
+  // drag-and-drop, which ignores `accept` entirely — without this check a
+  // dropped .txt or .exe was silently accepted with no feedback at all.
   const handleFile = (f: File) => {
+    setLocalError("");
+    const ext = "." + f.name.split(".").pop()?.toLowerCase();
+    if (!ACCEPTED_EXTENSIONS.includes(ext)) {
+      setLocalError(`Unsupported file type "${ext}" — upload a PDF, DOC, or DOCX file`);
+      return;
+    }
     if (f.size > MAX_MB * 1024 * 1024) {
-      alert(`File must be under ${MAX_MB} MB`);
+      setLocalError(`File must be under ${MAX_MB} MB (this file is ${(f.size / 1024 / 1024).toFixed(1)} MB)`);
       return;
     }
     setFile(f);
@@ -28,6 +39,7 @@ export function ContractUpload() {
 
   const onSubmit = async () => {
     if (!file) return;
+    setLocalError("");
     clearError();
     try {
       const contract = await uploadContract(file);
@@ -98,15 +110,23 @@ export function ContractUpload() {
         )}
       </div>
 
-      {error && (
+      {(localError || error) && (
         <div className="alert alert--error" role="alert">
           <div>
             <strong style={{ display: "block", marginBottom: "4px", fontSize: "0.85rem", fontWeight: "700" }}>
-              Ingestion Failed
+              {localError ? "Invalid File" : "Ingestion Failed"}
             </strong>
-            <span style={{ fontSize: "0.8rem" }}>{error}</span>
+            <span style={{ fontSize: "0.8rem" }}>{localError || error}</span>
           </div>
-          <button className="alert__close" onClick={clearError}>✕</button>
+          <button
+            className="alert__close"
+            onClick={() => {
+              setLocalError("");
+              clearError();
+            }}
+          >
+            ✕
+          </button>
         </div>
       )}
 

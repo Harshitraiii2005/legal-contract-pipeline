@@ -28,14 +28,28 @@ export default function ReviewPage() {
   );
   const [tab, setTab] = useState<Tab>("clauses");
   const [activeClause, setActiveClause] = useState<number | undefined>();
+  const [downloadError, setDownloadError] = useState("");
+  const [downloading, setDownloading] = useState<"redline" | "report" | null>(null);
 
   const handleDownload = async (type: "redline" | "report") => {
     if (!id) return;
-    const { data } =
-      type === "redline"
-        ? await contractsApi.downloadRedline(id)
-        : await contractsApi.downloadReport(id);
-    downloadBlob(data, type === "redline" ? "redlined_contract.docx" : "risk_report.pdf");
+    setDownloadError("");
+    setDownloading(type);
+    try {
+      const { data } =
+        type === "redline"
+          ? await contractsApi.downloadRedline(id)
+          : await contractsApi.downloadReport(id);
+      downloadBlob(data, type === "redline" ? "redlined_contract.docx" : "risk_report.pdf");
+    } catch (e: any) {
+      setDownloadError(
+        e.response?.status === 404
+          ? `The ${type === "redline" ? "redlined document" : "risk report"} isn't ready yet.`
+          : `Failed to download the ${type === "redline" ? "redlined document" : "risk report"}. Please try again.`
+      );
+    } finally {
+      setDownloading(null);
+    }
   };
 
   if (loading && !contract) return <div className="page-center"><div className="spinner" /></div>;
@@ -66,7 +80,7 @@ export default function ReviewPage() {
   return (
     <div className="page review-page">
       <header className="review-header">
-        <Link to="/" className="review-header__back">
+        <Link to="/app" className="review-header__back">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: "6px" }}>
             <line x1="19" y1="12" x2="5" y2="12" />
             <polyline points="12 19 5 12 12 5" />
@@ -82,22 +96,45 @@ export default function ReviewPage() {
         <div className="review-header__actions">
           {review && (
             <>
-              <button className="btn btn--ghost btn--sm" onClick={() => handleDownload("redline")}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" />
-                </svg>
+              <button
+                className="btn btn--ghost btn--sm"
+                onClick={() => handleDownload("redline")}
+                disabled={downloading !== null}
+              >
+                {downloading === "redline" ? (
+                  <span className="spinner spinner--sm" />
+                ) : (
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" />
+                  </svg>
+                )}
                 Redlined DOCX
               </button>
-              <button className="btn btn--ghost btn--sm" onClick={() => handleDownload("report")}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" />
-                </svg>
+              <button
+                className="btn btn--ghost btn--sm"
+                onClick={() => handleDownload("report")}
+                disabled={downloading !== null}
+              >
+                {downloading === "report" ? (
+                  <span className="spinner spinner--sm" />
+                ) : (
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" />
+                  </svg>
+                )}
                 Risk PDF
               </button>
             </>
           )}
         </div>
       </header>
+
+      {downloadError && (
+        <div className="alert alert--error" role="alert">
+          <span style={{ fontSize: "0.8rem" }}>{downloadError}</span>
+          <button className="alert__close" onClick={() => setDownloadError("")}>✕</button>
+        </div>
+      )}
 
       {/* Pipeline progress */}
       {isProcessing && (
