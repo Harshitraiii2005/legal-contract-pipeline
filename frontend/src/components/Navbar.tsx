@@ -1,10 +1,22 @@
 import { useState, useEffect } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+
+function isAuthenticated(): boolean {
+  return Boolean(localStorage.getItem("access_token"));
+}
 
 export function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [authed, setAuthed] = useState(isAuthenticated());
   const location = useLocation();
+  const navigate = useNavigate();
+
+  // Re-check on route change so signing in/out on another page (e.g. the
+  // Dashboard's "Sign out" button) is reflected here without a full reload.
+  useEffect(() => {
+    setAuthed(isAuthenticated());
+  }, [location]);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 20);
@@ -51,14 +63,40 @@ export function Navbar() {
         </div>
 
         <div className="navbar__actions">
-          <Link to="/login" className="navbar__link navbar__link--login">Sign In</Link>
-          <Link to="/app" className="navbar__cta">
-            Launch App
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="5" y1="12" x2="19" y2="12" />
-              <polyline points="12 5 19 12 12 19" />
-            </svg>
-          </Link>
+          {authed ? (
+            <>
+              <button
+                type="button"
+                className="navbar__link navbar__link--login"
+                style={{ background: "none", border: "none", cursor: "pointer", font: "inherit" }}
+                onClick={() => {
+                  localStorage.clear();
+                  setAuthed(false);
+                  navigate("/login");
+                }}
+              >
+                Sign out
+              </button>
+              <Link to="/app" className="navbar__cta">
+                Dashboard
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                  <polyline points="12 5 19 12 12 19" />
+                </svg>
+              </Link>
+            </>
+          ) : (
+            <>
+              <Link to="/login" className="navbar__link navbar__link--login">Sign In</Link>
+              <Link to="/login" className="navbar__cta">
+                Launch App
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                  <polyline points="12 5 19 12 12 19" />
+                </svg>
+              </Link>
+            </>
+          )}
         </div>
 
         {/* Mobile hamburger */}

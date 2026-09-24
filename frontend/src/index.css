@@ -233,6 +233,45 @@ a:hover {
 .form-textarea {
   resize: vertical;
 }
+.form-input--error {
+  border-color: var(--color-critical);
+}
+.form-input--error:focus {
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15);
+}
+.form-hint {
+  font-size: 0.78rem;
+  color: var(--color-text-dim);
+}
+.form-hint--error {
+  color: #fca5a5;
+}
+.form-input-group {
+  position: relative;
+  display: flex;
+}
+.form-input-group .form-input {
+  flex: 1;
+  padding-right: 44px;
+}
+.input-toggle-btn {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--color-text-dim);
+  transition: color var(--transition);
+}
+.input-toggle-btn:hover {
+  color: var(--color-text);
+}
 
 /* ── Alerts ─────────────────────────────────────────────────────────────────── */
 .alert {
